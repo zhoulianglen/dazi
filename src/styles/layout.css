@@ -1,0 +1,50 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+#app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 64px 1fr;
+  grid-template-areas:
+    "topbar"
+    "main";
+}
+
+.topbar { grid-area: topbar; }
+.main {
+  grid-area: main;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 2fr 1fr;
+  grid-template-areas:
+    "typing typing"
+    "input  hud";
+  gap: var(--gap-md);
+  padding: var(--gap-md);
+  min-height: 0;
+}
+
+.typing-area { grid-area: typing; }
+.input-area  { grid-area: input; min-height: 0; }
+.hud-panel   { grid-area: hud; }
+
+@media (max-width: 900px), (pointer: coarse) {
+  #app { grid-template-rows: 56px 1fr; }
+  .main {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "typing"
+      "input"
+      "hud";
+    overflow-y: auto;
+  }
+}
