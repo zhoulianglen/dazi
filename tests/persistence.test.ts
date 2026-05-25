@@ -4,7 +4,7 @@ import {
   loadSettings, saveSettings,
   loadStats, appendStat,
   exportAll, importAll,
-  PROGRESS_KEY, SETTINGS_KEY, STATS_KEY,
+  PROGRESS_KEY, SETTINGS_KEY,
 } from '../src/state/persistence';
 
 describe('persistence', () => {
