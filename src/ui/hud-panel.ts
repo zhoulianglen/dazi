@@ -1,6 +1,11 @@
 import type { TypingEngine } from '../engine/typing-engine';
 
-export function mountHudPanel(host: HTMLElement, engine: TypingEngine): () => void {
+export type HudControl = {
+  reset(): void;
+  teardown(): void;
+};
+
+export function mountHudPanel(host: HTMLElement, engine: TypingEngine): HudControl {
   host.classList.add('hud-panel');
   host.innerHTML = `
     <div>
@@ -20,8 +25,8 @@ export function mountHudPanel(host: HTMLElement, engine: TypingEngine): () => vo
     </div>
   `;
   const f = (name: string) => host.querySelector<HTMLElement>(`[data-field="${name}"]`)!;
-  const startedAt = Date.now();
-  const errorTally: Record<string, number> = {};
+  let startedAt = Date.now();
+  let errorTally: Record<string, number> = {};
 
   function fmtTime(ms: number): string {
     const s = Math.floor(ms / 1000);
@@ -55,7 +60,15 @@ export function mountHudPanel(host: HTMLElement, engine: TypingEngine): () => vo
   });
 
   update();
-  return () => { clearInterval(interval); off(); host.replaceChildren(); };
+  return {
+    reset(): void {
+      startedAt = Date.now();
+      errorTally = {};
+      update();
+      f('time').textContent = '00:00';
+    },
+    teardown(): void { clearInterval(interval); off(); host.replaceChildren(); },
+  };
 }
 
 function escapeText(s: string): string {

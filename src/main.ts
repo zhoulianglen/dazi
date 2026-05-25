@@ -63,6 +63,7 @@ function loadLesson(id: LessonId): void {
   prevKey = '';
   analyzer.reset();
   engine.loadText(pickText(id), id);
+  hud.reset();
   store.setView('practicing');
 }
 
@@ -84,7 +85,7 @@ function renderInputArea(): void {
 }
 renderInputArea();
 onLayoutChange(renderInputArea);
-mountHudPanel(app.querySelector('.hud-panel')!, engine);
+const hud = mountHudPanel(app.querySelector('.hud-panel')!, engine);
 mountSettingsWatcher(store);
 mountAudio(store, engine);
 
