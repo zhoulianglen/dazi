@@ -5,12 +5,15 @@ import './styles/fx.css';
 
 import { createStore } from './state/store';
 import { TypingEngine } from './engine/typing-engine';
+import { RhythmAnalyzer } from './engine/rhythm-analyzer';
 import { pickText } from './engine/lessons';
 import { mountTopbar } from './ui/topbar';
 import { mountTypingArea } from './ui/typing-area';
 import { mountKeyboard } from './ui/keyboard';
 import { mountHands } from './ui/hands';
 import { mountHudPanel } from './ui/hud-panel';
+import { openSummary } from './ui/summary-modal';
+import type { LessonId } from './types';
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -27,20 +30,44 @@ app.innerHTML = `
 
 const store = createStore();
 const engine = new TypingEngine();
+const analyzer = new RhythmAnalyzer();
 
-function startLesson(): void {
-  const id = store.get().currentLesson;
+let prevKey = '';
+engine.subscribe((e) => {
+  if (e.type === 'correct') {
+    analyzer.observe(prevKey, e.key, e.intervalMs);
+    prevKey = e.key;
+  } else if (e.type === 'finished') {
+    const slowPairs = analyzer.report();
+    const stats = { ...e.stats, slowPairs };
+    store.recordResult(stats);
+    openSummary(stats,
+      () => loadLesson(stats.lessonId),
+      () => loadLesson(Math.min(9, stats.lessonId + 1) as LessonId),
+    );
+  } else if (e.type === 'wrong') {
+    document.body.classList.remove('vignette-wrong');
+    void document.body.offsetWidth;
+    document.body.classList.add('vignette-wrong');
+  }
+});
+
+function loadLesson(id: LessonId): void {
+  if (id > store.get().progress.unlockedLesson) return;
+  store.setLesson(id);
+  prevKey = '';
+  analyzer.reset();
   engine.loadText(pickText(id), id);
   store.setView('practicing');
 }
 
-mountTopbar(app.querySelector('.topbar')!, store, startLesson);
+mountTopbar(app.querySelector('.topbar')!, store, () => loadLesson(store.get().currentLesson));
 mountTypingArea(app.querySelector('.typing-area')!, engine);
 mountKeyboard(app.querySelector('.keyboard')!, engine);
 mountHands(app.querySelector('.hands')!, engine);
 mountHudPanel(app.querySelector('.hud-panel')!, engine);
 
-startLesson();
+loadLesson(1);
 
 document.addEventListener('keydown', (ev) => {
   if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
