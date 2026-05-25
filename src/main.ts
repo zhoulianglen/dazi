@@ -53,6 +53,7 @@ engine.subscribe((e) => {
     document.body.classList.remove('vignette-wrong');
     void document.body.offsetWidth;
     document.body.classList.add('vignette-wrong');
+    setTimeout(() => document.body.classList.remove('vignette-wrong'), 200);
   }
 });
 
