@@ -104,22 +104,35 @@
   border-color: var(--accent-magenta);
 }
 
-.hands {
-  display: flex; justify-content: center; gap: var(--gap-xl);
-  margin-bottom: var(--gap-xs);
+.keyboard-wrap {
+  position: relative;
+  display: inline-block;
 }
-.hands svg { width: 160px; height: 110px; }
+.hands {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap-md);
+  pointer-events: none;
+}
+.hands svg { width: 220px; height: 151px; flex-shrink: 0; }
 .hands .finger {
   fill: currentColor;
-  opacity: 0.18;
+  opacity: 0.22;
   transition: opacity var(--fast), filter var(--fast);
 }
 .hands .finger[data-active="1"] {
   opacity: 1;
-  filter: drop-shadow(0 0 8px currentColor);
+  filter: drop-shadow(0 0 12px currentColor);
   animation: pulse-glow var(--pulse) ease-in-out infinite;
 }
-.hands .palm { fill: var(--line-cyan-dim); opacity: 0.15; }
+.hands .palm { fill: var(--line-cyan-dim); opacity: 0.18; }
+
+.keyboard-wrap .hands {
+  position: absolute;
+  inset: auto 0 0 0;
+  margin: 0;
+  z-index: 2;
+}
 
 .hud-panel {
   display: grid;
