@@ -73,7 +73,7 @@ export const LESSONS: Record<LessonId, Lesson> = {
     texts: [
       'order 4 cubes, 23 spheres, 18 cones, 506 prisms',
       'flight 374 departs at 1815 from gate 27a',
-      'we shipped 1024 units in q2, up 36% from 750',
+      'we shipped 1024 units in q2, up 36 points from 750',
     ],
   },
   8: {
