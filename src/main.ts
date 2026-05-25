@@ -5,6 +5,7 @@ import './styles/fx.css';
 
 import { TypingEngine } from './engine/typing-engine';
 import { mountTypingArea } from './ui/typing-area';
+import { mountKeyboard } from './ui/keyboard';
 import { pickText } from './engine/lessons';
 
 const app = document.getElementById('app')!;
@@ -20,6 +21,10 @@ app.innerHTML = `
 const engine = new TypingEngine();
 engine.loadText(pickText(1), 1);
 mountTypingArea(document.getElementById('typing')!, engine);
+
+const inputArea = document.querySelector<HTMLElement>('.input-area')!;
+inputArea.innerHTML = '<div class="keyboard"></div>';
+mountKeyboard(inputArea.querySelector<HTMLElement>('.keyboard')!, engine);
 
 document.addEventListener('keydown', (ev) => {
   if (ev.metaKey || ev.ctrlKey || ev.altKey) return;

@@ -62,3 +62,44 @@
   transition: width var(--med) ease-out;
   box-shadow: var(--glow-cyan);
 }
+
+.keyboard {
+  display: grid;
+  gap: var(--gap-xs);
+  font-family: var(--font-mono);
+  user-select: none;
+}
+.keyboard .row { display: flex; gap: var(--gap-xs); justify-content: center; }
+.keyboard .key {
+  flex: 0 0 44px;
+  height: 44px;
+  border: 1px solid var(--line-cyan-dim);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.02);
+  position: relative;
+  transition: box-shadow var(--fast), background var(--fast);
+}
+.keyboard .key.wide { flex-basis: 88px; }
+.keyboard .key.space { flex-basis: 320px; }
+.keyboard .key::before {
+  content: ''; position: absolute; inset: 0 0 -2px 0;
+  border-bottom: 2px solid var(--finger);
+  border-radius: 4px;
+  opacity: 0.6;
+}
+.keyboard .key[data-active="1"] {
+  border-color: var(--line-cyan);
+  box-shadow: var(--glow-cyan);
+  background: rgba(90, 242, 255, 0.08);
+  animation: pulse-glow var(--pulse) ease-in-out infinite;
+}
+.keyboard .key.flash-correct {
+  background: rgba(90, 242, 255, 0.35);
+}
+.keyboard .key.flash-wrong {
+  background: rgba(255, 58, 140, 0.35);
+  border-color: var(--accent-magenta);
+}
