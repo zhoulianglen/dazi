@@ -23,28 +23,28 @@ html, body {
 .main {
   grid-area: main;
   display: grid;
-  grid-template-rows: auto 1fr;
-  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr auto auto;
   grid-template-areas:
-    "typing typing"
-    "input  hud";
+    "typing"
+    "hud"
+    "input";
   gap: var(--gap-md);
   padding: var(--gap-md);
   min-height: 0;
 }
 
-.typing-area { grid-area: typing; }
-.input-area  { grid-area: input; min-height: 0; }
+.typing-area { grid-area: typing; min-height: 0; }
 .hud-panel   { grid-area: hud; }
+.input-area  {
+  grid-area: input;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-sm);
+}
 
 @media (max-width: 900px), (pointer: coarse) {
   #app { grid-template-rows: 56px 1fr; }
-  .main {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "typing"
-      "input"
-      "hud";
-    overflow-y: auto;
-  }
+  .main { overflow-y: auto; }
 }

@@ -24,11 +24,11 @@ app.innerHTML = `
   <div class="topbar panel"></div>
   <div class="main">
     <div class="typing-area panel"></div>
-    <div class="input-area panel">
-      <div class="keyboard"></div>
-      <div class="hands"></div>
-    </div>
     <div class="hud-panel panel"></div>
+    <div class="input-area panel">
+      <div class="hands"></div>
+      <div class="keyboard"></div>
+    </div>
   </div>
 `;
 
@@ -78,9 +78,9 @@ function renderInputArea(): void {
     inputArea.innerHTML = '<div class="softkb"></div>';
     inputTeardown.push(mountSoftKeyboard(inputArea.querySelector<HTMLElement>('.softkb')!, engine));
   } else {
-    inputArea.innerHTML = '<div class="keyboard"></div><div class="hands"></div>';
-    inputTeardown.push(mountKeyboard(inputArea.querySelector<HTMLElement>('.keyboard')!, engine));
+    inputArea.innerHTML = '<div class="hands"></div><div class="keyboard"></div>';
     inputTeardown.push(mountHands(inputArea.querySelector<HTMLElement>('.hands')!, engine));
+    inputTeardown.push(mountKeyboard(inputArea.querySelector<HTMLElement>('.keyboard')!, engine));
   }
 }
 renderInputArea();
