@@ -1,0 +1,56 @@
+:root {
+  /* palette */
+  --bg-deep: #05080d;
+  --bg-panel: #0a1018;
+  --bg-overlay: rgba(10, 16, 24, 0.85);
+  --line-cyan: #5af2ff;
+  --line-cyan-dim: rgba(90, 242, 255, 0.35);
+  --accent-magenta: #ff3a8c;
+  --accent-green: #5cff9d;
+  --text-primary: #e6f6ff;
+  --text-dim: rgba(230, 246, 255, 0.55);
+  --text-faint: rgba(230, 246, 255, 0.25);
+
+  /* finger zones (10 colors) */
+  --finger-L-pinky:  #ff9d5c;
+  --finger-L-ring:   #ffd25c;
+  --finger-L-mid:    #a3ff5c;
+  --finger-L-index:  #5cffd1;
+  --finger-L-thumb:  #5cb0ff;
+  --finger-R-thumb:  #8a5cff;
+  --finger-R-index:  #d15cff;
+  --finger-R-mid:    #ff5cd1;
+  --finger-R-ring:   #ff5c8a;
+  --finger-R-pinky:  #ff5c5c;
+
+  /* shadow / glow */
+  --glow-cyan: 0 0 12px rgba(90, 242, 255, 0.55);
+  --glow-magenta: 0 0 12px rgba(255, 58, 140, 0.55);
+  --glow-green: 0 0 12px rgba(92, 255, 157, 0.55);
+
+  /* timing */
+  --fast: 80ms;
+  --med: 200ms;
+  --slow: 400ms;
+  --pulse: 1200ms;
+
+  /* spacing */
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 16px;
+  --gap-lg: 24px;
+  --gap-xl: 40px;
+
+  /* fonts */
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+  --font-display: 'Orbitron', var(--font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fast: 0ms;
+    --med: 0ms;
+    --slow: 0ms;
+    --pulse: 0ms;
+  }
+}
