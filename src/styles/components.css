@@ -35,3 +35,30 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+
+.typing-area {
+  font-family: var(--font-mono);
+  font-size: clamp(20px, 3.2vw, 32px);
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  white-space: pre-wrap;
+  padding: var(--gap-lg);
+  position: relative;
+  overflow-y: auto;
+}
+.typing-area .ch        { color: var(--text-faint); }
+.typing-area .ch.typed  { color: var(--text-dim); }
+.typing-area .ch.wrong  { color: var(--accent-magenta); text-decoration: underline wavy; }
+.typing-area .ch.cursor {
+  color: var(--line-cyan);
+  background: rgba(90, 242, 255, 0.12);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--line-cyan-dim);
+  animation: pulse-glow var(--pulse) ease-in-out infinite;
+}
+.typing-area .progress {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, var(--line-cyan), var(--accent-green));
+  transition: width var(--med) ease-out;
+  box-shadow: var(--glow-cyan);
+}
