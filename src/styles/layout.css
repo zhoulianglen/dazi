@@ -23,10 +23,11 @@ html, body {
 .main {
   grid-area: main;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto auto 1fr;
   grid-template-areas:
     "typing"
     "hud"
+    "hint"
     "input";
   gap: var(--gap-md);
   padding: var(--gap-md);
@@ -39,6 +40,7 @@ html, body {
   max-height: 26vh;
 }
 .hud-panel   { grid-area: hud; }
+.finger-hint { grid-area: hint; }
 .input-area  {
   grid-area: input;
   display: flex;

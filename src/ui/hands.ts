@@ -18,31 +18,47 @@ const FINGERS_R: Array<{ id: Finger; x: number; y: number; w: number; h: number 
   { id: 'R-pinky', x: 138, y: 40, w: 18, h: 50 },
 ];
 
+// Short Chinese label per finger (single char fits inside the finger blob)
+const LABEL: Record<Finger, string> = {
+  'L-pinky': '小', 'L-ring': '无', 'L-mid': '中', 'L-index': '食', 'L-thumb': '拇',
+  'R-thumb': '拇', 'R-index': '食', 'R-mid': '中', 'R-ring': '无', 'R-pinky': '小',
+};
+
 function handSvg(fingers: typeof FINGERS_L, hand: 'L' | 'R'): string {
   const palm = `<rect class="palm" x="6" y="80" width="148" height="22" rx="8" />`;
-  const rects = fingers.map(f => `
-    <rect class="finger" data-finger="${f.id}"
-          x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" rx="8"
-          style="color: ${colorOf(f.id)}" />`).join('');
-  return `<svg viewBox="0 0 160 110" data-hand="${hand}" aria-label="${hand} hand">${palm}${rects}</svg>`;
+  const parts = fingers.map(f => {
+    const cx = f.x + f.w / 2;
+    // Place label near middle-to-bottom of each finger so it's away from fingertip
+    const cy = f.id.endsWith('thumb') ? f.y + f.h / 2 + 3 : f.y + f.h - 8;
+    return `
+      <rect class="finger" data-finger="${f.id}"
+            x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" rx="8"
+            style="color: ${colorOf(f.id)}" />
+      <text class="finger-label" data-finger="${f.id}"
+            x="${cx}" y="${cy}" text-anchor="middle"
+            style="color: ${colorOf(f.id)}">${LABEL[f.id]}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 160 110" data-hand="${hand}" aria-label="${hand} hand">${palm}${parts}</svg>`;
 }
 
 export function mountHands(host: HTMLElement, engine: TypingEngine): () => void {
   host.classList.add('hands');
   host.innerHTML = handSvg(FINGERS_L, 'L') + handSvg(FINGERS_R, 'R');
-  const els = new Map<Finger, SVGRectElement>();
+  const rects = new Map<Finger, SVGRectElement>();
+  const labels = new Map<Finger, SVGTextElement>();
   for (const f of ALL_FINGERS) {
-    const el = host.querySelector<SVGRectElement>(`[data-finger="${f}"]`);
-    if (el) els.set(f, el);
+    const r = host.querySelector<SVGRectElement>(`rect[data-finger="${f}"]`);
+    const t = host.querySelector<SVGTextElement>(`text[data-finger="${f}"]`);
+    if (r) rects.set(f, r);
+    if (t) labels.set(f, t);
   }
 
   function update(): void {
     const { cursor } = engine.getState();
     const expected = engine.getText()[cursor];
     const activeFinger = expected ? fingerOf(expected) : null;
-    for (const [f, el] of els) {
-      el.dataset.active = f === activeFinger ? '1' : '0';
-    }
+    for (const [f, el] of rects) el.dataset.active = f === activeFinger ? '1' : '0';
+    for (const [f, el] of labels) el.dataset.active = f === activeFinger ? '1' : '0';
   }
 
   update();

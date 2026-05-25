@@ -126,6 +126,76 @@
   animation: pulse-glow var(--pulse) ease-in-out infinite;
 }
 .hands .palm { fill: var(--line-cyan-dim); opacity: 0.18; }
+.hands text.finger-label {
+  fill: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity var(--fast), font-size var(--fast);
+}
+.hands text.finger-label[data-active="1"] {
+  fill: currentColor;
+  opacity: 1;
+  font-size: 16px;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+.finger-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-md);
+  padding: var(--gap-sm) var(--gap-lg);
+  background: rgba(10, 16, 24, 0.6);
+  border: 1px solid var(--line-cyan-dim);
+  border-radius: 6px;
+}
+.finger-hint .hint-label {
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.finger-hint .hint-key {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--line-cyan);
+  background: rgba(90, 242, 255, 0.08);
+  border: 1px solid var(--line-cyan);
+  border-radius: 6px;
+  min-width: 56px;
+  text-align: center;
+  padding: 2px 14px;
+  text-shadow: var(--glow-cyan);
+  transition: border-color var(--fast), box-shadow var(--fast);
+}
+.finger-hint .hint-arrow {
+  font-size: 22px;
+  color: var(--text-dim);
+}
+.finger-hint .hint-finger {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 10px currentColor;
+  transition: color var(--fast);
+}
+.finger-hint .hint-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  opacity: 0.7;
+  letter-spacing: 0.1em;
+}
+
+@media (max-width: 700px) {
+  .finger-hint { gap: var(--gap-sm); padding: var(--gap-xs) var(--gap-sm); flex-wrap: wrap; }
+  .finger-hint .hint-key { font-size: 24px; min-width: 40px; padding: 0 10px; }
+  .finger-hint .hint-finger { font-size: 18px; }
+  .finger-hint .hint-code { display: none; }
+}
 
 .keyboard-wrap .hands {
   position: absolute;

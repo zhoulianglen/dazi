@@ -14,6 +14,7 @@ import { mountHands } from './ui/hands';
 import { mountSoftKeyboard } from './ui/softkeyboard-mobile';
 import { isMobileLike, onLayoutChange } from './ui/layout';
 import { mountHudPanel } from './ui/hud-panel';
+import { mountFingerHint } from './ui/finger-hint';
 import { openSummary } from './ui/summary-modal';
 import { mountSettingsWatcher } from './ui/settings-modal';
 import { mountAudio } from './audio/click';
@@ -25,6 +26,7 @@ app.innerHTML = `
   <div class="main">
     <div class="typing-area panel"></div>
     <div class="hud-panel panel"></div>
+    <div class="finger-hint"></div>
     <div class="input-area panel"></div>
   </div>
 `;
@@ -83,6 +85,7 @@ function renderInputArea(): void {
 renderInputArea();
 onLayoutChange(renderInputArea);
 const hud = mountHudPanel(app.querySelector('.hud-panel')!, engine);
+mountFingerHint(app.querySelector('.finger-hint')!, engine);
 mountSettingsWatcher(store);
 mountAudio(store, engine);
 
