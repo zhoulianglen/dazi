@@ -53,9 +53,9 @@ export const LESSONS: Record<LessonId, Lesson> = {
     id: 5, name: 'Top Row Complete', passWpm: 30, passAcc: 0.95,
     allowedChars: 'asdfjkl;qwertyuiop ',
     texts: [
-      'quote write quiet power equity typing trophy poetry',
-      'a quirky proxy upset our weekly query report',
-      'pretty quiet typewriter properly outputs upper queue',
+      'quote write quiet party poetry purity output our pretty type letter',
+      'a quirky poet typed quiet pretty letters; we write our output queue',
+      'output type pretty quote write party equity our quiet letter poetry',
     ],
   },
   6: {
