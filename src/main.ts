@@ -16,6 +16,7 @@ import { isMobileLike, onLayoutChange } from './ui/layout';
 import { mountHudPanel } from './ui/hud-panel';
 import { openSummary } from './ui/summary-modal';
 import { mountSettingsWatcher } from './ui/settings-modal';
+import { mountAudio } from './audio/click';
 import type { LessonId } from './types';
 
 const app = document.getElementById('app')!;
@@ -84,6 +85,7 @@ renderInputArea();
 onLayoutChange(renderInputArea);
 mountHudPanel(app.querySelector('.hud-panel')!, engine);
 mountSettingsWatcher(store);
+mountAudio(store, engine);
 
 // Apply reduced motion preference on boot
 if (store.get().settings.reducedMotion) {
