@@ -6,6 +6,7 @@ import './styles/fx.css';
 import { TypingEngine } from './engine/typing-engine';
 import { mountTypingArea } from './ui/typing-area';
 import { mountKeyboard } from './ui/keyboard';
+import { mountHands } from './ui/hands';
 import { pickText } from './engine/lessons';
 
 const app = document.getElementById('app')!;
@@ -23,8 +24,9 @@ engine.loadText(pickText(1), 1);
 mountTypingArea(document.getElementById('typing')!, engine);
 
 const inputArea = document.querySelector<HTMLElement>('.input-area')!;
-inputArea.innerHTML = '<div class="keyboard"></div>';
+inputArea.innerHTML = '<div class="keyboard"></div><div class="hands"></div>';
 mountKeyboard(inputArea.querySelector<HTMLElement>('.keyboard')!, engine);
+mountHands(inputArea.querySelector<HTMLElement>('.hands')!, engine);
 
 document.addEventListener('keydown', (ev) => {
   if (ev.metaKey || ev.ctrlKey || ev.altKey) return;

@@ -103,3 +103,20 @@
   background: rgba(255, 58, 140, 0.35);
   border-color: var(--accent-magenta);
 }
+
+.hands {
+  display: flex; justify-content: center; gap: var(--gap-xl);
+  margin-top: var(--gap-md);
+}
+.hands svg { width: 160px; height: 110px; }
+.hands .finger {
+  fill: currentColor;
+  opacity: 0.18;
+  transition: opacity var(--fast), filter var(--fast);
+}
+.hands .finger[data-active="1"] {
+  opacity: 1;
+  filter: drop-shadow(0 0 8px currentColor);
+  animation: pulse-glow var(--pulse) ease-in-out infinite;
+}
+.hands .palm { fill: var(--line-cyan-dim); opacity: 0.15; }
