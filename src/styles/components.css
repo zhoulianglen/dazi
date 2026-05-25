@@ -120,3 +120,12 @@
   animation: pulse-glow var(--pulse) ease-in-out infinite;
 }
 .hands .palm { fill: var(--line-cyan-dim); opacity: 0.15; }
+
+.hud-panel { display: flex; flex-direction: column; gap: var(--gap-md); }
+.hud-row { display: flex; justify-content: space-between; align-items: baseline; }
+.hud-row .label { color: var(--text-dim); font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; }
+.hud-row .value { font-family: var(--font-display); font-size: 28px; color: var(--line-cyan); text-shadow: var(--glow-cyan); }
+.hud-bar { height: 6px; background: rgba(90,242,255,0.08); border-radius: 3px; overflow: hidden; }
+.hud-bar > span { display: block; height: 100%; background: var(--line-cyan); transition: width var(--med) ease-out; }
+.hud-errors { font-size: 12px; color: var(--text-dim); min-height: 24px; }
+.hud-errors .err { color: var(--accent-magenta); margin-right: var(--gap-sm); }

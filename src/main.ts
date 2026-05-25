@@ -7,6 +7,7 @@ import { TypingEngine } from './engine/typing-engine';
 import { mountTypingArea } from './ui/typing-area';
 import { mountKeyboard } from './ui/keyboard';
 import { mountHands } from './ui/hands';
+import { mountHudPanel } from './ui/hud-panel';
 import { pickText } from './engine/lessons';
 
 const app = document.getElementById('app')!;
@@ -27,6 +28,7 @@ const inputArea = document.querySelector<HTMLElement>('.input-area')!;
 inputArea.innerHTML = '<div class="keyboard"></div><div class="hands"></div>';
 mountKeyboard(inputArea.querySelector<HTMLElement>('.keyboard')!, engine);
 mountHands(inputArea.querySelector<HTMLElement>('.hands')!, engine);
+mountHudPanel(document.querySelector<HTMLElement>('.hud-panel')!, engine);
 
 document.addEventListener('keydown', (ev) => {
   if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
