@@ -15,6 +15,7 @@ import { mountSoftKeyboard } from './ui/softkeyboard-mobile';
 import { isMobileLike, onLayoutChange } from './ui/layout';
 import { mountHudPanel } from './ui/hud-panel';
 import { openSummary } from './ui/summary-modal';
+import { mountSettingsWatcher } from './ui/settings-modal';
 import type { LessonId } from './types';
 
 const app = document.getElementById('app')!;
@@ -82,6 +83,12 @@ function renderInputArea(): void {
 renderInputArea();
 onLayoutChange(renderInputArea);
 mountHudPanel(app.querySelector('.hud-panel')!, engine);
+mountSettingsWatcher(store);
+
+// Apply reduced motion preference on boot
+if (store.get().settings.reducedMotion) {
+  document.documentElement.classList.add('reduced-motion');
+}
 
 loadLesson(1);
 

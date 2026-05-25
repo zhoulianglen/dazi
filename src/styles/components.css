@@ -189,3 +189,9 @@
 .softkb .key.wide { flex: 2 1 0; }
 .softkb .key.space { flex: 6 1 0; }
 .softkb .row .divider { width: 2px; align-self: stretch; background: var(--line-cyan-dim); opacity: 0.4; }
+
+.settings { display: flex; flex-direction: column; gap: var(--gap-md); }
+.settings .row { display: flex; justify-content: space-between; align-items: center; }
+.settings input[type="range"] { width: 200px; accent-color: var(--line-cyan); }
+.settings .file { display: none; }
+.settings .danger { color: var(--accent-magenta); }
