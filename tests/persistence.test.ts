@@ -52,7 +52,7 @@ describe('persistence', () => {
     importAll({
       schema: 'dazi.v1',
       progress: { unlockedLesson: 5, perLessonBest: {} },
-      settings: { audioEnabled: true, audioVolume: 0.5, reducedMotion: false },
+      settings: { audioEnabled: true, audioVolume: 0.5, reducedMotion: false, locale: 'zh' as const },
       stats: [],
     });
     expect(loadProgress().unlockedLesson).toBe(5);
@@ -67,7 +67,7 @@ describe('persistence', () => {
   it('uses expected localStorage keys', () => {
     saveProgress({ unlockedLesson: 1, perLessonBest: {} });
     expect(localStorage.getItem(PROGRESS_KEY)).not.toBeNull();
-    saveSettings({ audioEnabled: false, audioVolume: 0.5, reducedMotion: false });
+    saveSettings({ audioEnabled: false, audioVolume: 0.5, reducedMotion: false, locale: 'zh' });
     expect(localStorage.getItem(SETTINGS_KEY)).not.toBeNull();
   });
 });

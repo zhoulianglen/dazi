@@ -1,4 +1,5 @@
 import type { TypingEngine } from '../engine/typing-engine';
+import { t } from '../i18n/i18n';
 
 export type HudControl = {
   reset(): void;
@@ -9,18 +10,18 @@ export function mountHudPanel(host: HTMLElement, engine: TypingEngine): HudContr
   host.classList.add('hud-panel');
   host.innerHTML = `
     <div>
-      <div class="hud-row"><span class="label">WPM</span><span class="value" data-field="wpm">0</span></div>
+      <div class="hud-row"><span class="label">${t('hud.wpm')}</span><span class="value" data-field="wpm">0</span></div>
       <div class="hud-bar"><span data-field="wpm-bar" style="width:0%"></span></div>
     </div>
     <div>
-      <div class="hud-row"><span class="label">Accuracy</span><span class="value" data-field="acc">100%</span></div>
+      <div class="hud-row"><span class="label">${t('hud.accuracy')}</span><span class="value" data-field="acc">100%</span></div>
       <div class="hud-bar"><span data-field="acc-bar" style="width:100%"></span></div>
     </div>
     <div>
-      <div class="hud-row"><span class="label">Session</span><span class="value" data-field="time">00:00</span></div>
+      <div class="hud-row"><span class="label">${t('hud.session')}</span><span class="value" data-field="time">00:00</span></div>
     </div>
     <div>
-      <div class="label">Error keys</div>
+      <div class="label">${t('hud.errors')}</div>
       <div class="hud-errors" data-field="errors"></div>
     </div>
   `;
@@ -44,7 +45,7 @@ export function mountHudPanel(host: HTMLElement, engine: TypingEngine): HudContr
     const errEl = f('errors');
     const entries = Object.entries(errorTally).sort((a, b) => b[1] - a[1]).slice(0, 6);
     errEl.innerHTML = entries.length === 0
-      ? '<span style="opacity:0.4">—</span>'
+      ? `<span style="opacity:0.4">${t('hud.noErrors')}</span>`
       : entries.map(([k, n]) => `<span class="err">${escapeText(k)}×${n}</span>`).join('');
   }
 

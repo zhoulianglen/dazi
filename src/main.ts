@@ -4,6 +4,7 @@ import './styles/components.css';
 import './styles/fx.css';
 
 import { createStore } from './state/store';
+import { setLocale } from './i18n/i18n';
 import { TypingEngine } from './engine/typing-engine';
 import { RhythmAnalyzer } from './engine/rhythm-analyzer';
 import { pickText } from './engine/lessons';
@@ -31,6 +32,7 @@ app.innerHTML = `
 `;
 
 const store = createStore();
+setLocale(store.get().settings.locale);
 const engine = new TypingEngine();
 const analyzer = new RhythmAnalyzer();
 

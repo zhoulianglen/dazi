@@ -24,6 +24,7 @@ export type Settings = {
   audioEnabled: boolean;
   audioVolume: number;
   reducedMotion: boolean;
+  locale: 'zh' | 'en';
 };
 
 export type EngineEvent =

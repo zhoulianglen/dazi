@@ -7,7 +7,7 @@ export const STATS_KEY    = 'dazi.stats.v1';
 const STATS_CAP = 200;
 
 const DEFAULT_PROGRESS: Progress = { unlockedLesson: 1, perLessonBest: {} };
-const DEFAULT_SETTINGS: Settings = { audioEnabled: false, audioVolume: 0.5, reducedMotion: false };
+const DEFAULT_SETTINGS: Settings = { audioEnabled: false, audioVolume: 0.5, reducedMotion: false, locale: 'zh' };
 
 function readJson<T>(key: string, fallback: T): T {
   try {

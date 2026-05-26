@@ -1,5 +1,6 @@
 import type { Store } from '../state/store';
 import { exportAll, importAll } from '../state/persistence';
+import { t } from '../i18n/i18n';
 
 export function mountSettingsWatcher(store: Store): () => void {
   return store.subscribe(s => s.view, (view) => {
@@ -14,27 +15,27 @@ function openSettings(store: Store): void {
   const modal = document.createElement('div');
   modal.className = 'modal panel settings';
   modal.innerHTML = `
-    <h2 style="font-family:var(--font-display); letter-spacing:0.2em; color:var(--line-cyan)">SETTINGS</h2>
+    <h2 style="font-family:var(--font-display); letter-spacing:0.2em; color:var(--line-cyan)">${t('settings.title').toUpperCase()}</h2>
     <div class="row">
-      <label>Sound on keypress</label>
+      <label>${t('settings.sound')}</label>
       <input type="checkbox" data-field="audio" ${s.audioEnabled ? 'checked' : ''}/>
     </div>
     <div class="row">
-      <label>Volume</label>
+      <label>${t('settings.volume')}</label>
       <input type="range" min="0" max="1" step="0.05" value="${s.audioVolume}" data-field="vol"/>
     </div>
     <div class="row">
-      <label>Reduced motion</label>
+      <label>${t('settings.reducedMotion')}</label>
       <input type="checkbox" data-field="rm" ${s.reducedMotion ? 'checked' : ''}/>
     </div>
     <hr style="border-color: var(--line-cyan-dim); opacity: 0.5"/>
     <div class="row">
-      <button class="btn" data-action="export">⇣ Export progress</button>
-      <button class="btn" data-action="import">⇡ Import progress</button>
+      <button class="btn" data-action="export">${t('settings.export')}</button>
+      <button class="btn" data-action="import">${t('settings.import')}</button>
       <input type="file" accept="application/json" class="file"/>
     </div>
     <div class="row" style="justify-content:flex-end">
-      <button class="btn" data-action="close">Close</button>
+      <button class="btn" data-action="close">${t('settings.close')}</button>
     </div>
   `;
   backdrop.appendChild(modal);
@@ -72,10 +73,10 @@ function openSettings(store: Store): void {
     if (!f) return;
     try {
       importAll(JSON.parse(await f.text()));
-      alert('Imported. Reload to apply.');
+      alert(t('settings.importDone'));
       location.reload();
     } catch (err) {
-      alert(`Import failed: ${(err as Error).message}`);
+      alert(t('settings.importFail', { msg: (err as Error).message }));
     }
   });
 }

@@ -1,11 +1,7 @@
 import type { SessionStats } from '../types';
 import { passesLesson, getLesson } from '../engine/lessons';
 import { fingerOf } from '../engine/finger-map';
-
-const FINGER_LABEL: Record<string, string> = {
-  'L-pinky': '左手小指', 'L-ring': '左手无名指', 'L-mid': '左手中指', 'L-index': '左手食指', 'L-thumb': '左手拇指',
-  'R-thumb': '右手拇指', 'R-index': '右手食指', 'R-mid': '右手中指', 'R-ring': '右手无名指', 'R-pinky': '右手小指',
-};
+import { t } from '../i18n/i18n';
 
 export function openSummary(
   stats: SessionStats,
@@ -22,30 +18,30 @@ export function openSummary(
 
   const slowItems = stats.slowPairs.slice(0, 5).map(p => {
     const f = fingerOf(p.to);
-    const hint = f ? FINGER_LABEL[f] : '?';
-    return `<div class="slow">  <b>${escapeText(p.from)} → ${escapeText(p.to)}</b>: ${p.meanMs}ms (上限 ${p.thresholdMs}ms) · 应使用 ${hint}</div>`;
-  }).join('') || '<div class="slow" style="opacity:0.5">无慢键 · 节奏达标</div>';
+    const hint = f ? t('finger.' + f) : '?';
+    return `<div class="slow">  <b>${escapeText(p.from)} → ${escapeText(p.to)}</b>: ${t('summary.slowItem', { from: escapeText(p.from), to: escapeText(p.to), ms: p.meanMs, threshold: p.thresholdMs, finger: hint })}</div>`;
+  }).join('') || `<div class="slow" style="opacity:0.5">${t('summary.noSlowPairs')}</div>`;
 
   modal.innerHTML = `
-    <div class="verdict ${passed ? 'pass' : 'fail'}">${passed ? '◆ LESSON COMPLETE ◆' : '— RETRY —'}</div>
+    <div class="verdict ${passed ? 'pass' : 'fail'}">${passed ? t('summary.complete') : t('summary.fail')}</div>
     <div class="big">
-      <div><div class="label">WPM</div><div class="value">${stats.wpm}</div></div>
-      <div><div class="label">Accuracy</div><div class="value">${Math.round(stats.acc * 100)}%</div></div>
-      <div><div class="label">Time</div><div class="value">${(stats.durationMs / 1000).toFixed(1)}s</div></div>
+      <div><div class="label">${t('summary.wpm')}</div><div class="value">${stats.wpm}</div></div>
+      <div><div class="label">${t('summary.acc')}</div><div class="value">${Math.round(stats.acc * 100)}%</div></div>
+      <div><div class="label">${t('summary.time')}</div><div class="value">${(stats.durationMs / 1000).toFixed(1)}s</div></div>
     </div>
     <div>
-      <div class="tag">Pass threshold</div>
+      <div class="tag">${t('summary.passThreshold')}</div>
       <div style="font-size:13px; color:var(--text-dim); margin-top:4px">
-        需要 ≥ ${lesson.passWpm} WPM · ≥ ${Math.round(lesson.passAcc * 100)}%
+        ${t('summary.passDetail', { wpm: lesson.passWpm, acc: Math.round(lesson.passAcc * 100) })}
       </div>
     </div>
     <div>
-      <div class="tag">Slow pairs (handness signal)</div>
+      <div class="tag">${t('summary.slowPairs')}</div>
       <div class="slow-list" style="margin-top:6px">${slowItems}</div>
     </div>
     <div class="actions">
-      <button class="btn" data-action="retry">Retry</button>
-      ${passed ? '<button class="btn" data-action="next">Next Lesson →</button>' : ''}
+      <button class="btn" data-action="retry">${t('summary.retry')}</button>
+      ${passed ? `<button class="btn" data-action="next">${t('summary.next')}</button>` : ''}
     </div>
   `;
   backdrop.appendChild(modal);
