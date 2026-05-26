@@ -126,20 +126,52 @@
   animation: pulse-glow var(--pulse) ease-in-out infinite;
 }
 .hands .palm { fill: var(--line-cyan-dim); opacity: 0.18; }
-.hands text.finger-label {
-  fill: var(--text-primary);
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  opacity: 0.55;
+
+/* Fingertips that sit above home-row keys + space */
+.keyboard .row:nth-child(3) { margin-top: 36px; }  /* home row: room for fingertips */
+.keyboard .row:nth-child(5) { margin-top: 30px; }  /* space row: room for thumbs */
+
+.fingertip {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 32px;
   pointer-events: none;
-  transition: opacity var(--fast), font-size var(--fast);
+  z-index: 4;
+  transition: transform var(--med) ease-out, filter var(--med) ease-out;
 }
-.hands text.finger-label[data-active="1"] {
+.fingertip .fg-body {
   fill: currentColor;
-  opacity: 1;
-  font-size: 16px;
-  filter: drop-shadow(0 0 4px currentColor);
+  fill-opacity: 0.4;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-opacity: 0.85;
+}
+.fingertip .fg-knuckle {
+  stroke: currentColor;
+  stroke-width: 0.6;
+  opacity: 0.5;
+}
+.fingertip .fg-nail {
+  fill: rgba(255, 255, 255, 0.5);
+}
+.fingertip[data-active="1"] {
+  transform: translateX(-50%) translateY(10px) scale(1.08);
+  filter: drop-shadow(0 0 4px currentColor) drop-shadow(0 0 12px currentColor);
+}
+.fingertip[data-active="1"] .fg-body { fill-opacity: 0.88; }
+.fingertip[data-active="1"] .fg-nail { fill: rgba(255, 255, 255, 0.95); }
+.fingertip[data-active="1"] .fg-knuckle { opacity: 0.9; }
+
+/* Two thumbs sit on the space bar, one each side of center */
+.fingertip.fingertip-left  { left: 35%; }
+.fingertip.fingertip-right { left: 65%; }
+
+.key .key-label {
+  position: relative;
+  z-index: 1;
 }
 
 .finger-hint {

@@ -10,7 +10,6 @@ import { pickText } from './engine/lessons';
 import { mountTopbar } from './ui/topbar';
 import { mountTypingArea } from './ui/typing-area';
 import { mountKeyboard } from './ui/keyboard';
-import { mountHands } from './ui/hands';
 import { mountSoftKeyboard } from './ui/softkeyboard-mobile';
 import { isMobileLike, onLayoutChange } from './ui/layout';
 import { mountHudPanel } from './ui/hud-panel';
@@ -77,9 +76,8 @@ function renderInputArea(): void {
     inputArea.innerHTML = '<div class="softkb"></div>';
     inputTeardown.push(mountSoftKeyboard(inputArea.querySelector<HTMLElement>('.softkb')!, engine));
   } else {
-    inputArea.innerHTML = '<div class="keyboard-wrap"><div class="keyboard"></div><div class="hands"></div></div>';
+    inputArea.innerHTML = '<div class="keyboard"></div>';
     inputTeardown.push(mountKeyboard(inputArea.querySelector<HTMLElement>('.keyboard')!, engine));
-    inputTeardown.push(mountHands(inputArea.querySelector<HTMLElement>('.hands')!, engine));
   }
 }
 renderInputArea();
