@@ -51,4 +51,27 @@ describe('lessons', () => {
       expect(b).toBeGreaterThanOrEqual(a);
     }
   });
+
+  it('every lesson text uses only chars in its allowedChars', () => {
+    for (const id of ALL_LESSON_IDS) {
+      const l = getLesson(id);
+      const allowed = new Set(l.allowedChars);
+      for (const text of l.texts) {
+        for (const c of text) {
+          if (!allowed.has(c)) {
+            throw new Error(
+              `L${id} text "${text}" uses char "${c}" not in allowedChars "${l.allowedChars}"`,
+            );
+          }
+        }
+      }
+    }
+  });
+
+  it('each lesson has a nameKey matching its id', () => {
+    for (const id of ALL_LESSON_IDS) {
+      const l = getLesson(id);
+      expect(l.nameKey).toBe(`lesson.${id}`);
+    }
+  });
 });
