@@ -10,28 +10,29 @@ const ROWS: Array<Array<{ key: string; label?: string; cls?: string }>> = [
   [{ key: ' ', label: '␣', cls: 'space' }],
 ];
 
-// Keys that always carry a fingertip sitting above them (home row letters + space halves).
-const HOME_KEYS = new Set(['a', 's', 'd', 'f', 'j', 'k', 'l', ';']);
-
-function fingertipSvg(f: Finger, side?: 'left' | 'right'): string {
-  const sideCls = side ? ` fingertip-${side}` : '';
-  return `<svg class="fingertip${sideCls}" data-finger="${f}" viewBox="0 0 24 36" style="color: ${colorOf(f)}" aria-hidden="true">
-      <path class="fg-body" d="M 6 0 L 6 26 Q 6 34 12 34 Q 18 34 18 26 L 18 0 Z"/>
-      <line class="fg-knuckle" x1="7" y1="6" x2="17" y2="6"/>
-      <ellipse class="fg-nail" cx="12" cy="28" rx="4.5" ry="2.5"/>
-    </svg>`;
+// SVG silhouette of a left hand. Finger tips at the top of the SVG line up with
+// home-row keys (a/s/d/f) when the SVG is placed at the right pixel offset.
+function leftHandSvg(): string {
+  return `<svg class="hand hand-left" viewBox="0 0 240 150" aria-hidden="true">
+    <rect class="palm" x="10" y="80" width="200" height="60" rx="24"/>
+    <rect class="finger" data-finger="L-pinky" style="color: ${colorOf('L-pinky')}" x="20"  y="22" width="22" height="64" rx="11"/>
+    <rect class="finger" data-finger="L-ring"  style="color: ${colorOf('L-ring')}"  x="68"  y="10" width="22" height="78" rx="11"/>
+    <rect class="finger" data-finger="L-mid"   style="color: ${colorOf('L-mid')}"   x="116" y="4"  width="22" height="86" rx="11"/>
+    <rect class="finger" data-finger="L-index" style="color: ${colorOf('L-index')}" x="164" y="12" width="22" height="78" rx="11"/>
+    <rect class="finger" data-finger="L-thumb" style="color: ${colorOf('L-thumb')}" x="190" y="98" width="44" height="26" rx="13"/>
+  </svg>`;
 }
 
-function fingertipsForKey(key: string): string {
-  if (key === ' ') {
-    // Two thumbs resting on the space bar, one each side
-    return fingertipSvg('L-thumb', 'left') + fingertipSvg('R-thumb', 'right');
-  }
-  if (HOME_KEYS.has(key)) {
-    const f = fingerOf(key);
-    return f ? fingertipSvg(f) : '';
-  }
-  return '';
+// Right hand: mirrored layout. R-pinky on the far right, thumb on the inside.
+function rightHandSvg(): string {
+  return `<svg class="hand hand-right" viewBox="0 0 240 150" aria-hidden="true">
+    <rect class="palm" x="30" y="80" width="200" height="60" rx="24"/>
+    <rect class="finger" data-finger="R-thumb" style="color: ${colorOf('R-thumb')}" x="6"   y="98" width="44" height="26" rx="13"/>
+    <rect class="finger" data-finger="R-index" style="color: ${colorOf('R-index')}" x="54"  y="12" width="22" height="78" rx="11"/>
+    <rect class="finger" data-finger="R-mid"   style="color: ${colorOf('R-mid')}"   x="102" y="4"  width="22" height="86" rx="11"/>
+    <rect class="finger" data-finger="R-ring"  style="color: ${colorOf('R-ring')}"  x="150" y="10" width="22" height="78" rx="11"/>
+    <rect class="finger" data-finger="R-pinky" style="color: ${colorOf('R-pinky')}" x="198" y="22" width="22" height="64" rx="11"/>
+  </svg>`;
 }
 
 export function mountKeyboard(host: HTMLElement, engine: TypingEngine): () => void {
@@ -42,20 +43,19 @@ export function mountKeyboard(host: HTMLElement, engine: TypingEngine): () => vo
         const f = fingerOf(k.key);
         const color = f ? colorOf(f) : 'transparent';
         const cls = ['key', k.cls ?? ''].filter(Boolean).join(' ');
-        const tips = fingertipsForKey(k.key);
         const label = k.label ?? escapeText(k.key);
-        return `<div class="${cls}" data-key="${escapeAttr(k.key)}" style="--finger: ${color}">${tips}<span class="key-label">${label}</span></div>`;
+        return `<div class="${cls}" data-key="${escapeAttr(k.key)}" style="--finger: ${color}">${label}</div>`;
       }).join('')}
     </div>
-  `).join('');
+  `).join('') + `<div class="hands-overlay">${leftHandSvg()}${rightHandSvg()}</div>`;
 
   const byKey = new Map<string, HTMLElement>();
   host.querySelectorAll<HTMLElement>('.key').forEach(el => byKey.set(el.dataset.key ?? '', el));
 
-  const fingertips = new Map<Finger, SVGElement>();
-  host.querySelectorAll<SVGElement>('.fingertip').forEach(el => {
+  const fingers = new Map<Finger, SVGRectElement>();
+  host.querySelectorAll<SVGRectElement>('.hand .finger').forEach(el => {
     const f = el.dataset.finger as Finger | undefined;
-    if (f) fingertips.set(f, el);
+    if (f) fingers.set(f, el);
   });
 
   function updateActive(): void {
@@ -66,7 +66,7 @@ export function mountKeyboard(host: HTMLElement, engine: TypingEngine): () => vo
       el.dataset.active = k === expected ? '1' : '0';
     }
     const activeFinger = expected ? fingerOf(expected) : null;
-    for (const [f, el] of fingertips) {
+    for (const [f, el] of fingers) {
       el.dataset.active = f === activeFinger ? '1' : '0';
     }
   }
