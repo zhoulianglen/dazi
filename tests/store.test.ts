@@ -27,11 +27,13 @@ describe('store', () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it('setLesson rejects locked lessons', () => {
+  it('setLesson accepts any valid LessonId (no gating)', () => {
     const s = createStore();
     expect(s.get().progress.unlockedLesson).toBe(1);
     s.setLesson(5);
-    expect(s.get().currentLesson).toBe(1);
+    expect(s.get().currentLesson).toBe(5);
+    s.setLesson(9);
+    expect(s.get().currentLesson).toBe(9);
   });
 
   it('recordResult unlocks next lesson on pass and persists', () => {

@@ -63,7 +63,8 @@ export function createStore(): Store {
     setView(view) { setState({ view }); },
     setLesson(id) {
       if (!ALL_LESSON_IDS.includes(id)) return;
-      if (id > state.progress.unlockedLesson) return;
+      // All lessons are accessible. progress.unlockedLesson is kept as a
+      // "highest passed" indicator for the picker, not a gate.
       setState({ currentLesson: id });
     },
     recordResult(stats) {

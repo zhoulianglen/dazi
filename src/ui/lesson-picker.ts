@@ -13,11 +13,11 @@ export function openLessonPicker(store: Store, onPick: (id: LessonId) => void): 
     <div class="lesson-picker">
       ${ALL_LESSON_IDS.map(id => {
         const l = getLesson(id);
-        const unlocked = id <= store.get().progress.unlockedLesson;
         const best = store.get().progress.perLessonBest[id];
+        const passed = !!best && best.wpm >= l.passWpm && best.acc >= l.passAcc;
         return `
-          <div class="lesson-card" data-id="${id}" data-locked="${unlocked ? 0 : 1}">
-            <div class="id">L${String(id).padStart(2, '0')}</div>
+          <div class="lesson-card" data-id="${id}" data-passed="${passed ? 1 : 0}">
+            <div class="id">L${String(id).padStart(2, '0')}${passed ? ' <span class="check">✓</span>' : ''}</div>
             <div class="name">${t('lesson.' + id)}</div>
             <div class="meta">${t('picker.passReq', { wpm: l.passWpm })}${best ? ` · ${t('picker.best', { wpm: best.wpm })}` : ''}</div>
           </div>`;
@@ -33,7 +33,6 @@ export function openLessonPicker(store: Store, onPick: (id: LessonId) => void): 
   modal.querySelector('[data-close]')!.addEventListener('click', close);
   modal.querySelectorAll<HTMLElement>('.lesson-card').forEach(card => {
     card.addEventListener('click', () => {
-      if (card.dataset.locked === '1') return;
       const id = Number(card.dataset.id) as LessonId;
       onPick(id);
       close();
