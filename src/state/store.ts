@@ -27,7 +27,7 @@ export type Store = {
 export function createStore(): Store {
   let state: AppState = {
     view: 'idle',
-    currentLesson: 1,
+    currentLesson: 8,
     progress: loadProgress(),
     settings: loadSettings(),
     lastStats: null,

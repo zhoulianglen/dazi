@@ -7,7 +7,7 @@ describe('store', () => {
   it('initializes from persistence defaults', () => {
     const s = createStore();
     expect(s.get().view).toBe('idle');
-    expect(s.get().currentLesson).toBe(1);
+    expect(s.get().currentLesson).toBe(8);
     expect(s.get().progress.unlockedLesson).toBe(1);
   });
 

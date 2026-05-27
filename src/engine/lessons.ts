@@ -143,22 +143,50 @@ export const LESSONS: Record<LessonId, Lesson> = {
     ],
   },
   8: {
-    id: 8, name: 'Punctuation + Shift', nameKey: 'lesson.8', passWpm: 36, passAcc: 0.95,
+    id: 8, name: 'Natural English', nameKey: 'lesson.8', passWpm: 36, passAcc: 0.95,
     allowedChars:
       "asdfjkl;qwertyuiopzxcvbnmghASDFJKLQWERTYUIOPZXCVBNMGH,./0123456789:'\"!?- ",
     texts: [
-      // quotes and punchy sentences with Shift
-      'Quick! Pay attention: "Brevity is the soul of wit."',
-      'It\'s 9:42 AM - she said, "Don\'t be late!"',
-      'Dr. Webb asked: "Where are the reports? I need them!"',
-      '"To be, or not to be?" - that is the question.',
-      'First rule: "Never give up." Second rule: see rule one.',
-      // more variety
-      '"All great things are simple," said the wise old writer.',
-      'Is it live? Or is it just a recording? Check it again!',
-      'Wait - did you say "yes"? Or was it "no"? I need clarity!',
-      'Tip: always ask "Why?" before "How?" - saves a lot of time.',
-      '"Simplicity is the ultimate sophistication." - Da Vinci',
+      // Inspirational quotes
+      'The journey of a thousand miles begins with a single step.',
+      'Be the change you wish to see in the world.',
+      'Stay hungry, stay foolish.',
+      'Imagination is more important than knowledge.',
+      'Whether you think you can or you cannot, you are right.',
+      'In the middle of every difficulty lies opportunity.',
+      'It always seems impossible until it is done.',
+      'The only way to do great work is to love what you do.',
+      'Success is not final; failure is not fatal.',
+      'The future belongs to those who believe in the beauty of their dreams.',
+      // Programming wisdom
+      'Code is read more often than it is written.',
+      'Premature optimization is the root of all evil.',
+      'Simple is better than complex; readability counts.',
+      'First, solve the problem. Then, write the code.',
+      'The best error message is the one that never shows up.',
+      'Make it work, make it right, make it fast.',
+      'Naming things is one of the hardest problems in software.',
+      'Talk is cheap; show me the code.',
+      // Literary and philosophical
+      'Two roads diverged in a wood, and I took the one less traveled by.',
+      'It was the best of times, it was the worst of times.',
+      'All that we are is the result of what we have thought.',
+      'The unexamined life is not worth living.',
+      'I think, therefore I am.',
+      'To be, or not to be, that is the question.',
+      'Knowing yourself is the beginning of all wisdom.',
+      // General observations
+      'Reading a book is like having a conversation across centuries.',
+      'A good cup of coffee can change the entire morning.',
+      'The night sky reminds us how vast the universe really is.',
+      'Small consistent actions compound into remarkable results.',
+      'Practice does not make perfect; practice makes permanent.',
+      // With quotes and questions
+      'She asked, "What is the meaning of all this work?"',
+      'He replied, "Brevity is the soul of wit."',
+      'Have you ever wondered why the sky is blue?',
+      'Why do we work so hard? Because the work itself matters.',
+      'The mountain said, "Climb me, and you will see further."',
     ],
   },
   9: {
