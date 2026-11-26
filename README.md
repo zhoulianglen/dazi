@@ -1,34 +1,34 @@
-# DAZI · 打字
+# DAZI · KeyKey-style typing tutor
 
-A complete PC browser typing tutor inspired by the focused learning experience of KeyKey. Learn standard ten-finger technique through progressive lessons, a live keyboard and hand guide, adaptive content, and personal statistics.
+A desktop browser typing product rebuilt against screenshots of the installed KeyKey macOS app: a charcoal practice canvas, three live metrics, a single practice line, outlined keyboard with translucent hand overlays, a right-side settings drawer and a full-window statistics screen.
 
 ## Run
 
 ```bash
 npm install
-npm run dev        # local development; Vite prints the URL
-npm test           # full unit and UI behavior suite
-npm run build      # type check and generate dist/
-npm run preview    # preview the production build
+npm run dev        # local preview URL printed by Vite
+npm test           # complete unit + DOM behavior suite
+npm run build      # TypeScript check and static dist/ output
+npm run preview    # serve the production build
 ```
 
-## Product
+## Product behavior
 
-- **Practice:** seven levels, live speed/accuracy/active time, next-key and opposite-hand Shift guidance, finger illustrations, optional sound, pause/resume, restart and results.
-- **Courses:** automatic progression (at least 95% accuracy plus the course speed target), or manual access to every lesson. English introduces key groups; Chinese introduces words and increasingly complex sentences.
-- **Independent languages:** Chinese/English interface and Chinese/English practice content are separate preferences. Switching the interface preserves the active exercise and typed progress.
-- **Two Chinese modes:** pinyin key practice (no tones; `v` for `ü`) and native IME transcription. Composition is ignored until committed; Chinese punctuation must match the displayed text.
-- **Adaptive practice:** recent mistakes prioritize matching words or sentences in the next exercise, for English, pinyin and Chinese IME. Content stays inside taught keys for introductory English lessons.
-- **Statistics:** speed chart, average accuracy, focused time, weak keys and dated history. English/pinyin use WPM (5 keystrokes per word); Chinese IME uses characters/minute. Modes are tracked separately.
-- **Preferences:** keyboard/hands/sounds, lesson length, daily practice goal, language controls, JSON backup export/import with validation and history deduplication. Clearing history requires an explicit in-app confirmation.
-- **Local data:** settings and up to 2,000 completed sessions stay in this browser under `dazi.tutor.v1`; no account or backend. Export before changing browsers. Blocked/full storage is reported without interrupting practice.
+- Six cumulative frequency-based lessons plus Expert. The observed first lesson uses E T A O and the reference screenshot's practice sequence. Manual mode permits any lesson; Automatic mode advances after a genuinely error-free completion. Later word lists are implemented locally; the native app's private generation algorithm is not included.
+- Capitals, numbers and punctuation are independent exercise options. Chinese supports number/punctuation options; pinyin also supports capitals. Capital letters are disabled for native Chinese IME practice.
+- Speed in characters/minute or words/minute (five characters per word), accuracy and typo count. Wrong characters advance and remain red. Backspace can correct the visible prefix, but recorded mistakes still prevent error-free progression.
+- ISO or ANSI QWERTY keyboard geometry, active curriculum keys, next-key and opposite-hand Shift guidance, transparent hand overlays, optional hints/keyboard/error sound and one/two practice lines.
+- Return restarts an active exercise or continues after completion; Escape pauses/resumes or dismisses the open panel. Window blur and page hiding pause active practice. Typing in settings and other controls does not enter the exercise.
+- Independent Chinese/English interface and practice-language selectors in the drawer. Changing interface language preserves typed progress. Chinese offers pinyin (no tones, `v` for `ü`) or system IME transcription. Only committed IME text is counted; composition is not a typo.
+- Statistics: per-mode lesson records, speed-based stars, a colored progression ribbon, speed/typo activity bars and selectable session details. Number/capital/punctuation records require an error-free Expert completion with that option enabled. The empty chart illustration matches the reference's empty state and is not historical data.
+- Settings and up to 2,000 completed sessions stay in this browser under `dazi.tutor.v1`. JSON export/import validates records and deduplicates IDs. A persistent export warning appears if saving fails. Clearing history requires in-app confirmation.
 
-Practice pauses when the window loses focus, the page is hidden, or another view opens. Paste is disabled during exercises. The guide explains posture; the browser does not observe a learner’s actual fingers or body position. Desktop keyboards are the primary input; narrow layouts adapt, but a physical keyboard is recommended.
+## Scope and implementation
 
-## Implementation
+Desktop physical keyboards are the primary input. No account or backend is needed. Progress is local to the current browser; export before switching devices. Keyboard and hand hints recommend technique and do not detect physical posture.
 
-Vite + strict TypeScript + DOM/CSS, with Vitest/jsdom tests. `src/main.ts` mounts the current product in `src/tutor/`: pure session/persistence logic in `model.ts`, learning content/key mapping in `content.ts`, views in `app.ts`, visual styles in `styles.css` and Lucide SVGs in `icons.ts` (ISC license). Earlier implementation modules remain in the repository, with their regression tests, but are not bundled into the current product.
+The active product lives in `src/tutor/`: session/persistence in `model.ts`, curriculum in `content.ts`, scalable keyboard/hand geometry in `keyboard.ts`, UI in `app.ts`, styling in `styles.css` and Lucide icons in `icons.ts`. Earlier inactive implementation modules and regression tests remain in the repository. The build has no runtime dependencies or remote font requirement. Icon license notices are shipped in `public/third-party-licenses.txt`.
 
-`dist/` is a static site suitable for GitHub Pages or another static host. The existing GitHub Actions base-path configuration is retained. Google Fonts are optional visual enhancements; local fallback fonts keep the product usable if they cannot load.
+`dist/` can deploy to a static host. The existing GitHub Actions base-path configuration is retained. No production deployment or remote push is part of this local implementation.
 
-Design and implementation notes: `docs/plans/2026-11-26-desktop-tutor-design.md` and `docs/plans/2026-11-26-desktop-tutor.md`.
+The current binding design/implementation record is `docs/plans/2026-11-26-keykey-replica.md`; it supersedes the earlier independent desktop UI direction.

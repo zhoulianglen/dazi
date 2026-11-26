@@ -6,107 +6,80 @@ import {
   validResult,
   sameMode,
   lessonUnlocked,
-  summarize,
   type Result,
   type Settings,
 } from "./model";
-import {
-  COURSES,
-  KEY_ROWS,
-  SHIFTED,
-  makeExercise,
-  courseName,
-  physicalKey,
-  fingerFor,
-} from "./content";
+import { makeExercise, COURSES } from "./content";
+import { renderKeyboard, renderHands, updateKeyboard } from "./keyboard";
 import { icon } from "./icons";
-
-type View = "practice" | "courses" | "statistics" | "settings";
-const escape = (value: string) =>
-  value.replace(
+const esc = (v: string) =>
+  v.replace(
     /[&<>"']/g,
     (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
         c
       ]!,
   );
-const clock = (seconds: number) =>
-  `${Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, "0")}:${Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, "0")}`;
+type Panel = "settings" | "help" | null;
 export function mountTutor(root: HTMLElement) {
   let data = readData();
-  let view: View = "practice";
-  let exercise = makeExercise(data.settings.course, data.settings);
-  let session = new Session(
-    exercise.text,
-    0,
-    data.settings.language === "zh" && data.settings.chineseMode === "ime",
-  );
-  let showGuide = false;
-  let showResult = false;
-  let composing = false;
-  let suppressCompositionInput = "";
-  let saveWarning = false;
+  let panel: Panel = null;
+  let statistics = false;
+  let exercise = makeExercise(data.settings.course, data.settings, {}, () => 0);
+  let session = new Session(exercise.text, 0, isIME(), true);
   let lastResult: Result | null = null;
-  let toastTimeout: ReturnType<typeof setTimeout>;
-  let audio: AudioContext | null = null;
+  let composing = false;
+  let compositionCommit = "";
+  let unsaved = false;
   let focused = true;
-  let lastPosition = 0;
-  let statsFilter: "all" | "week" = "all";
-  let restoreFocus: HTMLElement | null = null;
+  let audio: AudioContext | null = null;
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  let errorTimer: ReturnType<typeof setTimeout> | undefined;
+  let autoContinue = false;
+  let selectedBar: string | null = null;
   const s = () => data.settings;
   const t = (zh: string, en: string) => (s().locale === "zh" ? zh : en);
-  const isIME = () => s().language === "zh" && s().chineseMode === "ime";
-  const unit = () => (isIME() ? t("字 / 分钟", "chars / min") : "WPM");
-  const relevant = () => data.history.filter((r) => sameMode(r, s()));
-  const modeLabel = () =>
-    s().language === "en"
-      ? t("英文", "English")
-      : s().chineseMode === "ime"
-        ? t("中文 · 输入法", "Chinese · IME")
-        : t("中文 · 拼音", "Chinese · Pinyin");
-  const persist = () => {
-    saveWarning = !writeData(data);
-  };
+  function isIME() {
+    return (
+      data.settings.language === "zh" && data.settings.chineseMode === "ime"
+    );
+  }
+  const history = () => data.history.filter((r) => sameMode(r, s()));
+  const typoCount = () =>
+    Object.values(session.errors).reduce((n, v) => n + v, 0);
+  const unit = () =>
+    isIME() || s().speedUnit === "characters"
+      ? t("字 / 分钟", "char/min")
+      : t("词 / 分钟", "words/min");
+  const displayedSpeed = (speed: number) =>
+    Math.round(speed * (isIME() || s().speedUnit === "words" ? 1 : 5));
+  function save() {
+    unsaved = !writeData(data);
+  }
   function notify(message: string) {
-    let toast = root.querySelector<HTMLElement>(".toast");
-    if (!toast) {
-      toast = document.createElement("div");
-      toast.className = "toast";
-      toast.setAttribute("role", "status");
-      root.append(toast);
+    let el = root.querySelector<HTMLElement>(".toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "toast";
+      el.setAttribute("role", "status");
+      root.append(el);
     }
-    toast.textContent = message;
-    toast.classList.add("visible");
-    clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => toast?.classList.remove("visible"), 4200);
+    el.textContent = message;
+    el.classList.add("visible");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el?.remove(), 4000);
   }
   function weakKeys() {
-    const errors: Record<string, number> = {};
-    relevant()
+    const out: Record<string, number> = {};
+    history()
       .filter((r) => r.course === s().course)
       .slice(-5)
       .forEach((r) =>
-        Object.entries(r.errors).forEach(([k, n]) => {
-          errors[k] = (errors[k] || 0) + n;
-        }),
+        Object.entries(r.errors).forEach(
+          ([k, n]) => (out[k] = (out[k] || 0) + n),
+        ),
       );
-    return errors;
-  }
-  function newSession(course = s().course) {
-    s().course = course;
-    persist();
-    exercise = makeExercise(course, s(), weakKeys());
-    session = new Session(exercise.text, 0, isIME());
-    showResult = false;
-    composing = false;
-    focused = true;
-    lastPosition = 0;
-    render();
-    focusInput();
+    return out;
   }
   function focusInput() {
     requestAnimationFrame(() =>
@@ -115,442 +88,478 @@ export function mountTutor(root: HTMLElement) {
         ?.focus({ preventScroll: true }),
     );
   }
-  function changeSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
+  function restart(course = s().course) {
+    s().course = course;
+    save();
+    exercise = makeExercise(course, s(), weakKeys());
+    session = new Session(exercise.text, 0, isIME(), true);
+    composing = false;
+    compositionCommit = "";
+    lastResult = null;
+    focused = true;
+    if (!panel && !statistics) autoContinue = false;
+    if (panel || statistics) session.pause(performance.now());
+    render();
+    if (!panel && !statistics) focusInput();
+  }
+  function setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
     s()[key] = value;
-    persist();
-    if (["language", "chineseMode", "duration"].includes(key)) {
-      if (s().automatic && !lessonUnlocked(s().course, relevant(), s()))
+    if (
+      [
+        "language",
+        "chineseMode",
+        "capitals",
+        "numbers",
+        "punctuation",
+        "duration",
+        "course",
+      ].includes(key)
+    ) {
+      if (s().automatic && !lessonUnlocked(s().course, history(), s()))
         s().course = 0;
-      newSession();
+      restart();
     } else {
       if (
         key === "automatic" &&
         s().automatic &&
-        !lessonUnlocked(s().course, relevant(), s())
+        !lessonUnlocked(s().course, history(), s())
       ) {
-        newSession(0);
+        restart(0);
         return;
       }
+      save();
       render();
-      if (view === "practice" && !session.paused) focusInput();
     }
   }
-  function navigate(next: View) {
-    if (next !== "practice") session.pause(performance.now());
-    view = next;
-    showGuide = false;
-    showResult = false;
-    if (view === "practice" && session.done) {
-      newSession();
-      return;
+  function openPanel(next: Panel) {
+    if (next) {
+      autoContinue = !session.paused;
+      session.pause(performance.now());
+    }
+    panel = next;
+    render();
+    if (panel)
+      requestAnimationFrame(() =>
+        root
+          .querySelector<HTMLElement>(".drawer button, .help-dialog button")
+          ?.focus(),
+      );
+    else if (autoContinue && !session.done) {
+      session.resume(performance.now());
+      focused = true;
+      update();
+      focusInput();
+    }
+  }
+  function closePanel() {
+    panel = null;
+    if (autoContinue && !session.done) {
+      session.resume(performance.now());
+      focused = true;
     }
     render();
-    if (view === "practice" && !session.paused) focusInput();
+    if (!session.paused && !session.done) focusInput();
   }
-  function sound(ok: boolean) {
-    if (!s().sound) return;
+  function openStatistics() {
+    autoContinue = !session.paused;
+    session.pause(performance.now());
+    panel = null;
+    statistics = true;
+    selectedBar = null;
+    render();
+    requestAnimationFrame(() =>
+      root
+        .querySelector<HTMLButtonElement>('[data-action="close-statistics"]')
+        ?.focus(),
+    );
+  }
+  function closeStatistics() {
+    statistics = false;
+    if (session.done) {
+      restart();
+      return;
+    }
+    if (autoContinue) session.resume(performance.now());
+    focused = !session.paused;
+    render();
+    if (!session.paused) focusInput();
+  }
+  function pauseToggle() {
+    if (session.done || panel || statistics) return;
+    if (session.paused) {
+      session.resume(performance.now());
+      focused = true;
+    } else {
+      session.pause(performance.now());
+      focused = false;
+    }
+    render();
+    if (!session.paused) focusInput();
+  }
+  function sound(wrong: boolean) {
+    if (!s().sound || !wrong) return;
     try {
       audio ||= new AudioContext();
       if (audio.state === "suspended") void audio.resume();
-      const osc = audio.createOscillator(),
-        gain = audio.createGain();
-      osc.type = "sine";
-      osc.frequency.value = ok ? 650 : 180;
-      gain.gain.setValueAtTime(0.035, audio.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.045);
-      osc.connect(gain);
+      const duration = 0.045;
+      const noise = audio.createBuffer(
+        1,
+        Math.floor(audio.sampleRate * duration),
+        audio.sampleRate,
+      );
+      const channel = noise.getChannelData(0);
+      for (let i = 0; i < channel.length; i++)
+        channel[i] =
+          (Math.random() * 2 - 1) * Math.exp((-i / channel.length) * 9);
+      const source = audio.createBufferSource();
+      source.buffer = noise;
+      const filter = audio.createBiquadFilter();
+      filter.type = "highpass";
+      filter.frequency.value = 950;
+      const gain = audio.createGain();
+      gain.gain.value = 0.13;
+      source.connect(filter);
+      filter.connect(gain);
       gain.connect(audio.destination);
-      osc.start();
-      osc.stop(audio.currentTime + 0.05);
+      source.start();
     } catch {
-      /* Sound is optional when the browser blocks Web Audio. */
+      /* Audio is optional. */
     }
   }
   function complete() {
-    const metrics = session.metrics(performance.now());
+    const m = session.metrics(performance.now());
     lastResult = {
       id: crypto.randomUUID(),
       course: s().course,
       language: s().language,
       mode: s().chineseMode,
-      speed: metrics.speed,
-      accuracy: metrics.accuracy,
-      seconds: metrics.seconds,
+      speed: isIME() ? m.speed : m.charactersPerMinute / 5,
+      accuracy: m.accuracy,
+      seconds: m.seconds,
       at: Date.now(),
       errors: { ...session.errors },
       count: session.position,
+      extras: {
+        capitals: s().capitals,
+        numbers: s().numbers,
+        punctuation: s().punctuation,
+      },
     };
     data.history.push(lastResult);
     data.history = data.history.slice(-2000);
-    persist();
-    showResult = true;
+    save();
     render();
   }
   function accept(value: string) {
-    if (
-      view !== "practice" ||
-      session.paused ||
-      showGuide ||
-      showResult ||
-      !value
-    )
-      return;
+    if (!value || session.paused || panel || statistics || session.done) return;
+    const old = session.position;
     const ok = session.input(value, performance.now());
-    sound(ok);
-    root.querySelector(".typing-box")?.classList.toggle("mistake", !ok);
+    sound(!ok);
+    if (!ok && s().keyHints) {
+      root.querySelector(".keyboard-stage")?.classList.add("wrong-key");
+      clearTimeout(errorTimer);
+      errorTimer = setTimeout(
+        () =>
+          root.querySelector(".keyboard-stage")?.classList.remove("wrong-key"),
+        180,
+      );
+    }
+    updateLetters(old);
     if (session.done) complete();
-    else updatePractice();
-  }
-  function pauseToggle() {
-    if (session.done) return;
-    if (session.paused) {
-      session.resume(performance.now());
-      focused = true;
-    } else session.pause(performance.now());
-    render();
-    if (!session.paused) focusInput();
-  }
-  function heading(eyebrow: string, title: string, description: string) {
-    return `<div class="page-heading"><div><p class="eyebrow">${eyebrow}</p><h1>${title}</h1><p class="page-description">${description}</p></div>${view === "practice" ? `<button class="text-button guide-button" data-action="guide">${icon("hand")}${t("正确的打字姿势", "Find your posture")}</button>` : ""}</div>`;
+    else update();
   }
   function render() {
     document.documentElement.lang = s().locale === "zh" ? "zh-CN" : "en";
-    document.title = `${t("DAZI 打字 · 让指尖自然流动", "DAZI · Find your typing flow")}`;
-    const summary = summarize(data.history);
-    const today = new Date().toLocaleDateString("en-CA");
-    const todaySeconds = data.history
-      .filter((r) => new Date(r.at).toLocaleDateString("en-CA") === today)
-      .reduce((a, r) => a + r.seconds, 0);
-    const dailyProgress = Math.min(100, (todaySeconds / (s().goal * 60)) * 100);
-    const nav: Array<[View, string, string]> = [
-      ["practice", "keyboard", t("开始练习", "Practice")],
-      ["courses", "book-open", t("课程", "Courses")],
-      ["statistics", "chart-no-axes-combined", t("学习统计", "Statistics")],
-      ["settings", "settings-2", t("偏好设置", "Preferences")],
-    ];
-    root.innerHTML = `<div class="app-shell" ${showGuide || showResult ? "inert" : ""}>
-      <aside class="sidebar"><a class="brand" href="#practice" aria-label="DAZI ${t("首页", "home")}"><span class="brand-mark"><span>d</span><i></i></span><span>DAZI<span class="brand-caption">${t("让指尖自然流动", "Find your flow")}</span></span></a>
-      <div class="nav-section-label">${t("你的打字空间", "YOUR TYPING SPACE")}</div>
-      <nav aria-label="${t("主导航", "Main navigation")}">${nav.map(([id, i, label]) => `<button data-view="${id}" class="nav-item ${view === id ? "active" : ""}" ${view === id ? 'aria-current="page"' : ""}>${icon(i)}<span>${label}</span>${view === id ? '<span class="nav-active-dot"></span>' : ""}</button>`).join("")}</nav>
-      <div class="sidebar-bottom"><div class="daily-goal"><div class="goal-heading"><span>${t("每天一点点", "A LITTLE EVERY DAY")}</span><span class="sun-symbol">☼</span></div><p>${t("好习惯，慢慢养成。", "Good habits take practice.")}</p><div class="goal-progress" role="progressbar" aria-label="${t("每日练习目标", "Daily practice goal")}" aria-valuenow="${Math.round(dailyProgress)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${dailyProgress}%"></span></div><div class="goal-numbers"><span>${Math.floor(todaySeconds / 60)} / ${s().goal} ${t("分钟", "min")}</span><span>${Math.round(dailyProgress)}%</span></div></div>
-      <button class="sidebar-help" data-action="guide">${icon("circle-help")} ${t("指法与坐姿指南", "Typing & posture guide")}</button><div class="local-profile"><span class="avatar">D</span><div>${t("我的学习空间", "My learning space")}<small>${t("进度保存在此浏览器", "Progress saved in this browser")}</small></div></div></div></aside>
-      <div class="workspace"><header class="topbar"><div class="breadcrumbs"><span>DAZI</span><span>/</span><strong>${nav.find((x) => x[0] === view)![2]}</strong></div><div class="topbar-right">${saveWarning ? `<button class="local-tag storage-warning" data-action="export" aria-live="polite">${icon("x")}${t("未保存 · 导出备份", "Not saved · export a backup")}</button>` : `<span class="local-tag">${icon("check")}${t("本地保存", "Saved locally")}</span>`}<span class="top-divider"></span><button class="locale-button" data-action="locale" aria-label="${t("Switch interface to English", "切换界面为中文")}">${icon("globe")}<span>${s().locale === "zh" ? "简体中文" : "English"}</span>${icon("chevron-down")}</button></div></header>
-      <main id="main-content" class="main-content ${view}">${view === "practice" ? practiceView() : view === "courses" ? coursesView() : view === "statistics" ? statisticsView() : settingsView()}</main>
-      <footer class="app-footer"><span>${t("不必着急。准确一点，放松一点。", "Take your time. Stay accurate. Stay relaxed.")}</span><span>DAZI <span class="footer-dot">·</span> ${t("为每一次进步而设计", "Made for your next small step")} <span class="footer-count">${summary.sessions} ${t("次练习", "sessions")}</span></span></footer></div></div>
-      ${showGuide ? guideDialog() : ""}${showResult && lastResult ? resultDialog(lastResult) : ""}`;
+    document.title = t("DAZI · 打字练习", "DAZI · Typing Tutor");
+    root.innerHTML = `${statistics ? renderStatistics() : renderPractice()}${panel ? `<div class="panel-scrim" data-action="close-panel"></div>${panel === "settings" ? renderSettings() : renderHelp()}` : ""}${unsaved ? `<button class="storage-warning" data-action="export">${t("未保存 · 导出备份", "Not saved · export a backup")}</button>` : ""}<input id="import-file" type="file" accept="application/json,.json" hidden>`;
     bind();
-    if (showGuide || showResult)
-      requestAnimationFrame(() =>
-        root.querySelector<HTMLButtonElement>("dialog button")?.focus(),
-      );
-    if (view === "practice") updatePractice();
+    if (!statistics) {
+      update();
+      requestAnimationFrame(updateTextPosition);
+    }
   }
-  function languageControls() {
-    return `<div class="language-controls"><label class="language-select">${icon("globe")}<select id="content-language" aria-label="${t("练习内容语言", "Practice content language")}"><option value="en" ${s().language === "en" ? "selected" : ""}>${t("英文练习", "English practice")}</option><option value="zh" ${s().language === "zh" ? "selected" : ""}>${t("中文练习", "Chinese practice")}</option></select>${icon("chevron-down")}</label>${s().language === "zh" ? `<label class="language-select mode-select"><select id="chinese-mode" aria-label="${t("中文输入模式", "Chinese input mode")}"><option value="pinyin" ${!isIME() ? "selected" : ""}>${t("拼音指法", "Pinyin keys")}</option><option value="ime" ${isIME() ? "selected" : ""}>${t("输入法", "Chinese IME")}</option></select>${icon("chevron-down")}</label>` : ""}</div>`;
-  }
-  function practiceView() {
-    const course = s().course;
-    return `${heading(t("把练习变成习惯", "A LITTLE PRACTICE, EVERY DAY"), t("手指归位，慢慢找到节奏。", "Find your keys. Find your flow."), t("让准确先于速度，让每一次敲击都更自然。", "A little more accuracy. A little less effort. One keystroke at a time."))}
-      <section class="practice-card" aria-label="${t("打字练习", "Typing practice")}"><div class="lesson-toolbar"><button class="lesson-button" data-view="courses"><span class="lesson-number">${(course + 1).toString().padStart(2, "0")}</span><span><small>${t("当前课程", "CURRENT LESSON")}</small><strong>${courseName(course, s())}</strong></span>${icon("chevron-down")}</button>${languageControls()}</div>
-      <div class="session-info"><span class="practice-mode"><span class="mode-indicator"></span>${s().automatic ? t("智能练习", "Adaptive practice") : t("自由练习", "Manual practice")}<span class="soft-divider">/</span>${s().language === "en" ? COURSES[course].keys : isIME() ? t("中文输入法", "Chinese IME") : t("无声调全拼", "Pinyin without tones")}</span><div class="live-stats"><span><b id="speed">0</b><small>${unit()}</small></span><i></i><span><b id="accuracy">100</b><small>% ${t("准确率", "accuracy")}</small></span><i></i><span class="time-stat">${icon("pause")}<b id="timer">00:00</b></span></div></div>
-      <div class="typing-box" id="typing-box"><div class="source-text ${!exercise.source || isIME() ? "is-hidden" : ""}">${escape(exercise.source)}</div><div class="typing-window"><div id="typing-text" class="typing-text ${isIME() ? "chinese-text" : ""}" aria-hidden="true">${renderLetters()}</div></div><label for="typing-input" class="sr-only">${t("输入上方文字，错键后请重试，按 Esc 暂停。", "Type the text above. Retry mistakes. Press Escape to pause.")}: ${escape(exercise.text)}</label><textarea id="typing-input" class="typing-input ${isIME() ? "ime-input" : ""}" autocomplete="off" autocapitalize="off" spellcheck="false" rows="1" placeholder="${isIME() ? t("使用你的中文输入法，在这里输入上方文字…", "Use your Chinese IME to type the text above…") : ""}" ${session.paused || showResult || showGuide ? "disabled" : ""}></textarea>
-      <div id="practice-overlay" class="practice-overlay ${session.paused ? "" : "is-hidden"}"><button class="resume-button" data-action="resume">${icon("play")}<strong>${t("练习已暂停", "Practice paused")}</strong><span>${t("点击继续，找回你的节奏", "Click to pick up where you left off")}</span></button></div></div>
-      <div class="text-footer"><span id="start-hint">${t("直接敲击键盘开始练习", "Start typing to begin")}<span class="hint-dot">·</span>${isIME() ? t("支持系统中文输入法", "Your Chinese IME is supported") : t("请切换至英文输入法", "Use your English keyboard")}</span><span class="text-counter"><span id="typed-count">0</span> / ${exercise.text.length}</span></div><div class="session-progress"><span id="session-progress-fill"></span></div></section>
-      <section class="keyboard-section" aria-label="${t("键盘与手指提示", "Keyboard and finger guidance")}"><div class="keyboard-toolbar"><div class="finger-instruction">${icon("hand")}<span id="finger-hint"></span></div><div class="practice-actions"><button class="icon-button ${s().sound ? "enabled" : ""}" data-action="sound" title="${t("按键音效", "Key sounds")}" aria-label="${t("按键音效", "Key sounds")}" aria-pressed="${s().sound}">${icon(s().sound ? "volume-2" : "volume-x")}</button><button class="icon-button" data-action="restart" title="${t("重新开始", "Restart")}" aria-label="${t("重新开始", "Restart")}">${icon("rotate-ccw")}</button><button class="icon-button" data-action="pause" title="${t("暂停 / 继续（Esc）", "Pause / resume (Esc)")}" aria-label="${t("暂停或继续", "Pause or resume")}">${icon(session.paused ? "play" : "pause")}</button><span class="action-divider"></span><button class="icon-button ${s().keyboard ? "enabled" : ""}" data-action="keyboard" title="${t("显示键盘", "Show keyboard")}" aria-label="${t("显示键盘", "Show keyboard")}" aria-pressed="${s().keyboard}">${icon("keyboard")}</button><button class="icon-button ${s().hands ? "enabled" : ""}" data-action="hands" title="${t("显示双手", "Show hands")}" aria-label="${t("显示双手", "Show hands")}" aria-pressed="${s().hands}">${icon("hand")}</button></div></div>
-      ${s().keyboard ? keyboardView() : `<button class="hidden-keyboard" data-action="keyboard">${icon("keyboard")}${t("键盘已隐藏 · 点击显示提示", "Keyboard hidden · click to show hints")}</button>`}
-      ${s().hands && !isIME() ? `<div class="hands-area"><span class="hand-side left">${t("左手", "LEFT HAND")}</span>${handSVG(false)}<div class="hands-center"><span class="home-keys"><kbd>F</kbd><kbd>J</kbd></span><p>${t("食指找到凸起，双手自然归位", "Find the bumps. Make yourself at home.")}</p></div>${handSVG(true)}<span class="hand-side right">${t("右手", "RIGHT HAND")}</span></div>` : ""}</section>
-      <div class="coaching-note"><span class="tip-mark">${icon("focus")}</span><p><strong>${t("小提示", "A gentle reminder")}</strong>${isIME() ? t("输入法组词时不会计为错键；候选词提交后再进行检查。", "Composition is never counted as a mistake. Only committed characters are checked.") : s().language === "zh" ? t("按照标准指法输入全拼，ü 用 v 表示；不需要输入声调。", "Type full pinyin with standard finger placement. Use v for ü and omit tones.") : COURSES[course][s().locale === "zh" ? "hintZh" : "hintEn"]}</p><button data-action="guide" aria-label="${t("查看更多指法说明", "More typing guidance")}">${icon("chevron-right")}</button></div>`;
+  function renderPractice() {
+    const metric = (glyph: string, id: string, label: string, suffix = "") =>
+      `<div class="metric"><span class="metric-glyph">${icon(glyph)}</span><div class="metric-value"><div><span id="${id}">${id === "accuracy" ? 100 : 0}</span>${suffix}</div><span class="metric-label">${label}</span></div></div>`;
+    return `<main class="app-shell practice-screen ${s().keyboard ? "" : "without-keyboard"}" ${panel ? "inert" : ""}>
+      <button class="corner-button settings-button" data-action="settings" aria-label="${t("设置", "Settings")}" title="${t("设置", "Settings")}">${icon("settings")}</button>
+      <section class="metrics" aria-label="${t("实时练习统计", "Live statistics")}">${metric("wind", "speed", unit())}${metric("award", "accuracy", t("准确率", "accuracy"), "<small>%</small>")}${metric("skull", "typos", t("错字", "typos"))}</section>
+      <section class="practice-strip ${s().textLines === 2 ? "two-lines" : ""} ${isIME() ? "ime-practice" : ""}" aria-label="${t("打字练习", "Typing practice")}">
+        ${exercise.source && !isIME() ? `<div class="chinese-source">${esc(exercise.source)}</div>` : ""}
+        <div class="typing-window"><div id="typing-text" class="typing-text ${isIME() ? "chinese-text" : ""}" aria-hidden="true">${renderLetters()}</div></div>
+        <label class="sr-only" for="typing-input">${t("输入练习文字", "Type the practice text")}: ${esc(exercise.text)}</label><textarea id="typing-input" class="typing-input ${isIME() ? "ime-input" : ""}" autocomplete="off" autocapitalize="off" spellcheck="false" rows="1" ${session.paused || session.done || panel ? "disabled" : ""} placeholder="${isIME() ? t("使用中文输入法输入上方文字", "Use your Chinese IME to type the text above") : ""}"></textarea>
+        ${session.done ? renderCompletion() : ""}
+        <div id="practice-overlay" class="practice-overlay ${session.paused ? "" : "is-hidden"}"><button class="resume-button" data-action="resume">${icon("play")}<span>${t("点击继续练习", "Click to resume")}</span></button></div><span class="sr-only" id="typed-count">${session.position}</span>
+      </section>
+      ${s().keyboard ? `<section class="keyboard-stage" aria-label="${t("键盘与双手指法提示", "Keyboard and finger hints")}">${renderKeyboard(s())}${s().hands ? renderHands() : ""}</section>` : ""}
+      <div class="screen-controls"><button class="corner-button help-button" data-action="help" aria-label="${t("帮助", "Help")}" title="${t("帮助", "Help")}">${icon("circle-help")}</button><button class="corner-button restart-button" data-action="restart" aria-label="${t("重新开始", "Restart")}" title="${t("重新开始 [Return]", "Restart lesson [Return key]")}">${icon("rotate-cw")}</button><button class="corner-button statistics-button" data-action="statistics" aria-label="${t("学习统计", "Statistics")}" title="${t("学习统计", "Statistics")}">${icon("chart-pie")}</button></div>
+    </main>`;
   }
   function renderLetters() {
     return [...exercise.text]
       .map(
         (c, i) =>
-          `<span class="letter ${i < session.position ? "typed" : i === session.position ? "current" : ""}" data-index="${i}">${escape(c)}</span>`,
+          `<span class="letter ${i < session.position ? "typed" : i === session.position ? "current" : ""} ${session.mistakes[i] ? "mistyped" : ""}" data-index="${i}">${esc(c)}</span>`,
       )
       .join("");
   }
-  function keyboardView() {
-    return `<div class="keyboard" aria-label="QWERTY"><div class="keyboard-inner">${KEY_ROWS.map(
-      (row, rowIndex) =>
-        `<div class="key-row row-${rowIndex}">${row
-          .map((key) => {
-            const special = key.length > 1;
-            const display: Record<string, string> = {
-              Backspace: "delete",
-              Caps: "caps lock",
-              Enter: "enter",
-              Shift: "shift",
-              ShiftRight: "shift",
-              Ctrl: "ctrl",
-              CtrlRight: "ctrl",
-              Alt: "alt",
-              AltRight: "alt",
-              Win: "win",
-              Menu: "menu",
-              Space: "",
-              Fn: "fn",
-              Tab: "tab",
-            };
-            const shift = Object.entries(SHIFTED).find(
-              ([, base]) => base === key,
-            )?.[0];
-            return `<div data-key="${escape(key)}" class="key ${special ? "special key-" + key.toLowerCase() : ""} ${key === "f" || key === "j" ? "home-key" : ""}" data-finger="${fingerFor(key)}">${shift ? `<small>${escape(shift)}</small>` : ""}<span>${escape(display[key] ?? key.toUpperCase())}</span>${key === "f" || key === "j" ? '<i class="home-bump"></i>' : ""}</div>`;
-          })
-          .join("")}</div>`,
-    ).join("")}</div></div>`;
-  }
-  function handSVG(right: boolean) {
-    const indices = right ? [9, 8, 7, 6, 5] : [0, 1, 2, 3, 4];
-    return `<svg class="hand-illustration" viewBox="0 0 180 180" fill="none" aria-hidden="true"><g ${right ? 'transform="translate(180 0) scale(-1 1)"' : ""}><path class="hand-outline" d="M45 171C43 153 29 141 27 119L24 74C23 63 38 61 40 73L44 107L41 43C40 31 57 29 58 42L62 96L62 26C62 13 79 13 80 26L81 96L86 38C87 25 103 27 102 40L99 112L124 92C135 83 145 96 136 107L111 139C105 148 105 160 104 171"/><path class="hand-line" d="M43 117Q64 111 79 119M52 137Q69 129 90 136M64 152L88 152M110 115Q94 111 91 131"/>
-      ${[
-        [32, 77],
-        [50, 45],
-        [71, 29],
-        [94, 42],
-        [127, 100],
-      ]
-        .map(
-          ([x, y], i) =>
-            `<circle class="finger-pad" data-hand-finger="${indices[i]}" cx="${x}" cy="${y}" r="7"/>`,
-        )
-        .join("")}</g></svg>`;
-  }
-  function updatePractice() {
-    if (view !== "practice") return;
-    const metrics = session.metrics(performance.now());
-    const set = (id: string, value: string) => {
-      const el = root.querySelector("#" + id);
-      if (el) el.textContent = value;
-    };
-    set("speed", String(metrics.speed));
-    set("accuracy", String(metrics.accuracy));
-    set("timer", clock(metrics.seconds));
-    set("typed-count", String(session.position));
-    const fill = root.querySelector<HTMLElement>("#session-progress-fill");
-    if (fill)
-      fill.style.width = `${(session.position / exercise.text.length) * 100}%`;
+  function updateLetters(start: number) {
     const letters = root.querySelectorAll<HTMLElement>(".letter");
-    for (
-      let i = Math.min(lastPosition, session.position);
-      i <= Math.max(lastPosition, session.position);
-      i++
-    ) {
+    for (let i = Math.max(0, start - 1); i <= session.position; i++) {
       const el = letters[i];
       if (el)
-        el.className = `letter ${i < session.position ? "typed" : i === session.position ? "current" : ""}`;
+        el.className = `letter ${i < session.position ? "typed" : i === session.position ? "current" : ""} ${session.mistakes[i] ? "mistyped" : ""}`;
     }
-    lastPosition = session.position;
-    const current = root.querySelector<HTMLElement>(".letter.current");
-    const line = root.querySelector<HTMLElement>("#typing-text");
-    if (current && line)
-      line.style.transform = `translateY(-${Math.max(0, current.offsetTop - line.offsetTop - parseFloat(getComputedStyle(line).lineHeight))}px)`;
-    const char = exercise.text[session.position] || "";
-    const target = physicalKey(char);
-    const finger = fingerFor(char);
-    const needsShift = char !== char.toLowerCase() || !!SHIFTED[char];
-    root.querySelectorAll<HTMLElement>("[data-key]").forEach((el) => {
-      el.classList.toggle(
-        "target",
-        !isIME() && el.dataset.key === target && !session.done,
-      );
-      el.classList.toggle(
-        "shift-target",
-        !isIME() &&
-          needsShift &&
-          el.dataset.key === (finger < 5 ? "ShiftRight" : "Shift"),
-      );
-    });
+  }
+  function updateTextPosition() {
+    const text = root.querySelector<HTMLElement>("#typing-text");
+    const current = text?.querySelector<HTMLElement>(".current");
+    const viewport = root.querySelector<HTMLElement>(".typing-window");
+    if (!text || !viewport || !current) return;
+    if (s().textLines === 1) {
+      const offset =
+        text.scrollWidth <= viewport.clientWidth
+          ? 0
+          : Math.max(0, current.offsetLeft - viewport.clientWidth * 0.8);
+      text.style.transform = `translateX(-${offset}px)`;
+    } else {
+      const height = parseFloat(getComputedStyle(text).lineHeight) || 40;
+      text.style.transform = `translateY(-${Math.max(0, current.offsetTop - height)}px)`;
+    }
+  }
+  function update() {
+    if (statistics) return;
+    const m = session.metrics(performance.now());
+    for (const [id, value] of Object.entries({
+      speed:
+        isIME() || s().speedUnit === "characters"
+          ? m.charactersPerMinute
+          : m.speed,
+      accuracy: m.accuracy,
+      typos: typoCount(),
+      "typed-count": session.position,
+    })) {
+      const el = root.querySelector("#" + id);
+      if (el) el.textContent = String(value);
+    }
     root
-      .querySelectorAll("[data-hand-finger]")
-      .forEach((el) =>
-        el.classList.toggle(
-          "active",
-          !isIME() && Number(el.getAttribute("data-hand-finger")) === finger,
-        ),
-      );
-    const fingersZh = [
-      "左手小指",
-      "左手无名指",
-      "左手中指",
-      "左手食指",
-      "拇指",
-      "右手拇指",
-      "右手食指",
-      "右手中指",
-      "右手无名指",
-      "右手小指",
-    ];
-    const fingersEn = [
-      "Left pinky",
-      "Left ring finger",
-      "Left middle finger",
-      "Left index finger",
-      "Thumb",
-      "Right thumb",
-      "Right index finger",
-      "Right middle finger",
-      "Right ring finger",
-      "Right pinky",
-    ];
-    const hint = root.querySelector("#finger-hint");
-    if (hint)
-      hint.innerHTML = session.done
-        ? t("练习已完成", "Practice complete")
-        : isIME()
-          ? t(
-              "使用中文输入法，提交汉字后检查",
-              "Type with your Chinese IME; committed text is checked",
-            )
-          : `<strong>${(s().locale === "zh" ? fingersZh : fingersEn)[finger]}</strong><span class="finger-hint-separator">${t("按下", "press")}</span><kbd>${escape(char === " " ? t("空格", "space") : char.toUpperCase())}</kbd>${needsShift ? "<small> + Shift</small>" : ""}`;
-    const start = root.querySelector("#start-hint");
-    if (start && session.started !== null)
-      start.innerHTML = `${t("保持专注，跟随自己的节奏", "Stay present. Follow your own rhythm.")}<span class="hint-dot">·</span><kbd>Esc</kbd> ${t("暂停", "to pause")}`;
-    const overlay = root.querySelector("#practice-overlay");
-    if (overlay)
-      overlay.classList.toggle(
+      .querySelector("#practice-overlay")
+      ?.classList.toggle(
         "is-hidden",
-        session.done || (!session.paused && focused),
+        !session.paused || session.done || !!panel,
       );
-  }
-  function coursesView() {
-    const history = relevant();
-    const passed = COURSES.filter((_, i) =>
-      history.some(
-        (r) => r.course === i && r.accuracy >= 95 && r.speed >= 15 + i * 5,
-      ),
-    ).length;
-    return `${heading(t("从容开始，循序渐进", "BUILD YOUR MUSCLE MEMORY"), t("每一小步，都是进步。", "Small steps. Real progress."), t("从基准键开始，让正确的指法成为不假思索的习惯。", "Start with the home row. Make good technique second nature."))}<div class="section-toolbar">${languageControls()}<div class="segmented"><button data-action="auto" class="${s().automatic ? "selected" : ""}">${t("智能进阶", "Automatic")}</button><button data-action="manual" class="${!s().automatic ? "selected" : ""}">${t("自由选课", "Manual")}</button></div></div>
-    <div class="course-overview"><div><span>${t("你的学习路径", "Your learning path")}</span><strong>${passed}<small> / ${COURSES.length} ${t("课程达标", "lessons passed")}</small></strong></div><div class="path-progress"><span style="width:${(passed / COURSES.length) * 100}%"></span></div><p>${s().automatic ? t("达到 95% 准确率和目标速度，自动推荐下一课。也可以选择自由选课。", "Reach 95% accuracy and the target speed to advance. Switch to Manual to explore any lesson.") : t("所有课程均可自由练习，学习成绩仍会被记录。", "Every lesson is yours to explore. Your results are still recorded.")}</p></div>
-    <div class="course-list">${COURSES.map((c, i) => {
-      const unlocked = !s().automatic || lessonUnlocked(i, history, s());
-      const results = history.filter((r) => r.course === i);
-      const best = summarize(results).best;
-      const done = results.some(
-        (r) => r.accuracy >= 95 && r.speed >= 15 + i * 5,
-      );
-      return `<button class="course-row ${s().course === i ? "current-course" : ""} ${!unlocked ? "locked-course" : ""}" data-course="${i}" ${!unlocked ? 'aria-disabled="true"' : ""}><span class="course-index ${done ? "passed" : ""}">${done ? icon("check") : (i + 1).toString().padStart(2, "0")}</span><span class="course-description"><strong>${courseName(i, s())}${s().course === i ? `<em>${t("正在学习", "CURRENT")}</em>` : ""}</strong><small>${s().language === "en" ? c.keys : t("中文词句 · ", "Chinese phrases · ") + (isIME() ? t("输入法", "IME") : t("拼音指法", "Pinyin"))}</small></span><span class="course-requirement">${t("目标", "Target")} ${15 + i * 5} ${unit()}<small>${t("准确率", "Accuracy")} ≥ 95%</small></span><span class="course-best">${best ? `${best} <small>${unit()}</small>` : "—"}<small>${t("最佳成绩", "Personal best")}</small></span><span class="course-open">${unlocked ? icon("chevron-right") : t("待解锁", "Locked")}</span></button>`;
-    }).join(
-      "",
-    )}</div><p class="section-footnote">${t("拼音模式使用无声调全拼，ü 用 v 表示；中文课程按词句难度递进。", "Pinyin uses full syllables without tones; type v for ü. Chinese lessons progress by phrase complexity.")}</p>`;
-  }
-  function statisticsView() {
-    const history = relevant().filter(
-      (r) => statsFilter === "all" || r.at > Date.now() - 7 * 86400000,
+    updateKeyboard(
+      root,
+      s(),
+      exercise.text[session.position] || "",
+      session.done,
     );
-    const total = summarize(history);
-    const recent = history.slice(-20);
-    const max = Math.max(60, total.best + 10);
-    const errors: Record<string, number> = {};
-    history.forEach((r) =>
-      Object.entries(r.errors).forEach(([k, n]) => {
-        errors[k] = (errors[k] || 0) + n;
-      }),
-    );
-    const weak = Object.entries(errors)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6);
-    return `${heading(t("看见每一次成长", "YOUR PRACTICE, OVER TIME"), t("进步，正在发生。", "Look how far you’ve come."), t("记录的不只是速度，还有越来越从容的自己。", "More than speed. A record of becoming more confident at the keyboard."))}<div class="section-toolbar">${languageControls()}<label class="language-select"><select id="stats-filter" aria-label="${t("统计时间范围", "Statistics time range")}"><option value="all" ${statsFilter === "all" ? "selected" : ""}>${t("全部时间", "All time")}</option><option value="week" ${statsFilter === "week" ? "selected" : ""}>${t("最近 7 天", "Last 7 days")}</option></select>${icon("chevron-down")}</label></div>
-    <div class="stat-overview">${[
-      [t("最佳速度", "Best speed"), String(total.best), unit()],
-      [t("平均准确率", "Average accuracy"), String(total.accuracy), "%"],
-      [
-        t("累计练习", "Time practiced"),
-        String(Math.floor(total.seconds / 60)),
-        t("分钟", "min"),
-      ],
-      [
-        t("完成练习", "Sessions completed"),
-        String(total.sessions),
-        t("次", "sessions"),
-      ],
-    ]
+    updateTextPosition();
+  }
+  function renderCompletion() {
+    const passed = typoCount() === 0;
+    return `<div class="lesson-complete" role="status"><div class="completion-stars">${stars(passed ? lastResult?.speed || 0 : 0)}</div><h2 id="result-title">${passed ? t("课程完成", "Lesson complete") : t("练习完成", "Practice complete")}</h2><span>${t("按 Return 继续", "Press Return to continue")}</span><button data-action="continue">${t("继续", "Continue")}</button><button data-action="statistics">${t("查看统计", "Statistics")}</button></div>`;
+  }
+  function stars(speed: number) {
+    const halves = Math.min(6, Math.floor((isIME() ? speed : speed * 5) / 50));
+    return [0, 1, 2]
       .map(
-        ([title, value, u]) =>
-          `<div class="stat-block"><span>${title}</span><strong>${value}<small>${u}</small></strong></div>`,
+        (i) =>
+          `<span class="rating-star ${halves >= (i + 1) * 2 ? "full" : halves > i * 2 ? "half" : ""}" aria-hidden="true">☆<span>★</span></span>`,
       )
-      .join("")}</div>
-    <section class="chart-section"><div class="section-title"><h2>${t("你的速度曲线", "Your rhythm, visualized")}</h2><span>${modeLabel()} · ${unit()}</span></div>${recent.length ? `<div class="chart" role="img" aria-label="${t("最近练习速度，按时间排序", "Recent session speeds, oldest first")}: ${recent.map((r) => r.speed).join(", ")}"><div class="chart-grid">${[max, Math.round(max * 0.75), Math.round(max * 0.5), Math.round(max * 0.25), 0].map((n) => `<div><span>${n}</span><i></i></div>`).join("")}</div><div class="chart-bars">${recent.map((r, i) => `<div class="chart-bar-wrap"><div class="chart-bar" style="height:${Math.max(2, (r.speed / max) * 100)}%"><div class="chart-tooltip">${r.speed} ${unit()} · ${r.accuracy}%<small>${new Date(r.at).toLocaleDateString(s().locale)}</small></div></div><span>${i + 1}</span></div>`).join("")}</div></div>` : `<div class="empty-chart">${icon("chart-no-axes-combined")}<h3>${t("你的第一条进步曲线，从这里开始", "Your story starts with a little practice")}</h3><p>${t("完成一次练习，速度和准确率就会出现在这里。", "Finish a session to see your speed and accuracy here.")}</p><button class="primary-button" data-view="practice">${t("开始第一次练习", "Start practicing")}</button></div>`}</section>
-    <div class="stats-bottom"><section class="weak-section"><h2>${t("值得多练的键", "Give these keys a little love")}</h2><p>${t("智能练习会根据最近的错键，调整后续练习。", "Adaptive practice uses recent mistakes to tailor your next exercise.")}</p><div class="weak-keys">${weak.length ? weak.map(([k, n]) => `<span><kbd>${escape(k === " " ? "space" : k.toUpperCase())}</kbd><small>${n} ${t("次", "misses")}</small></span>`).join("") : `<span class="muted">${t("还没有错键记录，保持轻松。", "No mistakes recorded. Keep it relaxed.")}</span>`}</div></section><section class="practice-history"><div class="section-title"><h2>${t("最近练习", "Recent sessions")}</h2><span>${t("最近 10 次", "Last 10")}</span></div>${
-      history.length
-        ? `<div class="history-table"><div class="history-head"><span>${t("课程 / 日期", "Lesson / date")}</span><span>${unit()}</span><span>${t("准确率", "Accuracy")}</span></div>${history
-            .slice(-10)
-            .reverse()
-            .map(
-              (r) =>
-                `<div class="history-row"><span><strong>${courseName(r.course, s())}</strong><small>${new Date(r.at).toLocaleString(s().locale, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small></span><strong>${r.speed}</strong><span>${r.accuracy}%</span></div>`,
+      .join("");
+  }
+  function select(
+    id: string,
+    value: string | number,
+    options: Array<[string | number, string]>,
+    label: string,
+  ) {
+    return `<label class="select-wrap"><select id="${id}" aria-label="${label}">${options.map(([v, title]) => `<option value="${v}" ${value === v ? "selected" : ""}>${title}</option>`).join("")}</select><span class="select-chevron" aria-hidden="true">⌄</span></label>`;
+  }
+  function settingRow(label: string, control: string) {
+    return `<div class="setting-row"><span>${label}</span>${control}</div>`;
+  }
+  function toggle(
+    key:
+      | "capitals"
+      | "numbers"
+      | "punctuation"
+      | "keyHints"
+      | "hands"
+      | "keyboard"
+      | "sound",
+    label: string,
+  ) {
+    return settingRow(
+      label,
+      `<button class="switch ${s()[key] ? "on" : ""}" ${key === "capitals" && isIME() ? `disabled title="${t("中文输入法模式不使用大写字母", "Capital letters do not apply to Chinese IME")}"` : ""} role="switch" aria-label="${label}" aria-checked="${s()[key]}" data-toggle="${key}"><span></span></button>`,
+    );
+  }
+  function renderSettings() {
+    const current = s().course;
+    const courseLabel =
+      current === 6
+        ? t("专家", "Expert")
+        : `${t("第", "Lesson ")}${current + 1}${t(" 课", "")}<small>${t("共 6 课", "from 6")}</small>`;
+    return `<aside class="drawer" role="dialog" aria-modal="true" aria-label="${t("设置", "Settings")}"><button class="drawer-close" data-action="close-panel" aria-label="${t("关闭设置", "Close settings")}">${icon("x")}</button>
+      <section class="drawer-section selection-section"><h2>${t("课程选择", "LESSON SELECTION")}</h2><div class="segmented"><button data-action="automatic" class="${s().automatic ? "selected" : ""}" aria-pressed="${s().automatic}">${t("自动", "Automatic")}</button><button data-action="manual" class="${!s().automatic ? "selected" : ""}" aria-pressed="${!s().automatic}">${t("手动", "Manual")}</button></div><div class="lesson-selection"><div class="lesson-current">${courseLabel}</div><p>${s().language === "en" ? t("字母：", "Letters: ") + COURSES[current].keys.toLowerCase().replaceAll("+ ", "") : isIME() ? t("中文输入法练习", "Chinese IME practice") : t("中文拼音指法练习", "Chinese pinyin practice")}</p>${!s().automatic ? `<div class="manual-lessons" aria-label="${t("选择课程", "Select lesson")}">${COURSES.map((_, i) => `<button data-course="${i}" class="${current === i ? "selected" : ""}" ${current === i ? 'aria-current="true"' : ""}>${i === 6 ? t("专家", "Expert") : i + 1}</button>`).join("")}</div>` : ""}</div></section>
+      <section class="drawer-section"><h2>${t("添加到课程", "ADD TO THE LESSON")}</h2>${toggle("capitals", t("大写字母", "Capital letters"))}${toggle("numbers", t("数字", "Numbers"))}${toggle("punctuation", t("标点符号", "Punctuation"))}</section>
+      <section class="drawer-section"><h2>${t("设置", "SETTINGS")}</h2>${settingRow(
+        t("界面语言", "Interface language"),
+        select(
+          "interface-language",
+          s().locale,
+          [
+            ["zh", "简体中文"],
+            ["en", "English"],
+          ],
+          t("界面语言", "Interface language"),
+        ),
+      )}${settingRow(
+        t("练习语言", "Language"),
+        select(
+          "content-language",
+          s().language,
+          [
+            ["en", "🇺🇸 EN"],
+            ["zh", "🇨🇳 中文"],
+          ],
+          t("练习内容语言", "Practice content language"),
+        ),
+      )}${
+        s().language === "zh"
+          ? settingRow(
+              t("中文模式", "Chinese mode"),
+              select(
+                "chinese-mode",
+                s().chineseMode,
+                [
+                  ["pinyin", t("拼音", "Pinyin")],
+                  ["ime", t("输入法", "IME")],
+                ],
+                t("中文输入模式", "Chinese input mode"),
+              ),
             )
-            .join("")}</div>`
-        : `<p class="muted history-empty">${t("还没有完成的练习。每一次开始都值得。", "No sessions yet. Every beginning counts.")}</p>`
-    }</section></div>`;
-  }
-  function settingsView() {
-    const toggle = (
-      key: "sound" | "keyboard" | "hands" | "automatic",
-      title: string,
-      desc: string,
-    ) =>
-      `<div class="setting-row"><div><strong>${title}</strong><p>${desc}</p></div><button role="switch" aria-checked="${s()[key]}" aria-label="${title}" data-toggle="${key}" class="switch ${s()[key] ? "on" : ""}"><span></span></button></div>`;
-    return `${heading(t("用你喜欢的方式", "MAKE YOURSELF AT HOME"), t("属于你的练习方式。", "A space that feels like you."), t("一点小调整，让每一次练习都更舒服。设置会自动保存。", "Small adjustments for a more comfortable practice. Everything saves automatically."))}<div class="settings-content"><section class="settings-section"><h2>${t("语言与内容", "Language & content")}</h2><div class="setting-row"><div><strong>${t("界面语言", "Interface language")}</strong><p>${t("只改变菜单和提示，不会改变练习内容。", "Changes menus and guidance, independently of practice content.")}</p></div><label class="language-select"><select id="interface-language" aria-label="${t("界面语言", "Interface language")}"><option value="zh" ${s().locale === "zh" ? "selected" : ""}>简体中文</option><option value="en" ${s().locale === "en" ? "selected" : ""}>English</option></select>${icon("chevron-down")}</label></div><div class="setting-row"><div><strong>${t("练习内容语言", "Practice content language")}</strong><p>${t("选择你想练习的语言，与界面语言无关。", "Choose what you type. Your interface language stays the same.")}</p></div>${languageControls()}</div><div class="language-explainer">${icon("globe")}<p>${t("例如：可以使用英文界面练习中文，也可以使用中文界面练习英文。", "For example, practice Chinese with an English interface, or English with a Chinese interface.")}</p></div></section><section class="settings-section"><h2>${t("练习偏好", "Practice preferences")}</h2>${toggle("automatic", t("智能进阶", "Automatic progression"), t("根据速度和准确率解锁课程，并针对薄弱键位练习。", "Unlock lessons through speed and accuracy; practice your weaker keys."))}${toggle("sound", t("按键音效", "Key sounds"), t("轻柔的敲击声，不同的错误提示音。", "A gentle click for each key, with a distinct sound for mistakes."))}${toggle("keyboard", t("显示虚拟键盘", "On-screen keyboard"), t("实时高亮下一个按键及所需的 Shift。", "Highlight the next key and the Shift key when needed."))}${toggle("hands", t("显示双手提示", "Hand guidance"), t("通过手指高亮学习标准指法，输入法模式除外。", "Learn standard finger placement with highlighted fingertips, except in IME mode."))}<div class="setting-row"><div><strong>${t("练习长度", "Exercise length")}</strong><p>${t("较短的练习有助于保持专注，按内容长度估算。", "Short sessions help you focus. Longer options include more text.")}</p></div><label class="language-select"><select id="duration" aria-label="${t("练习长度", "Exercise length")}">${[1, 2, 3].map((v, i) => `<option value="${v}" ${s().duration === v ? "selected" : ""}>${[t("短篇", "Short"), t("中篇", "Medium"), t("长篇", "Long")][i]}</option>`).join("")}</select>${icon("chevron-down")}</label></div><div class="setting-row"><div><strong>${t("每日练习目标", "Daily practice goal")}</strong><p>${t("比起一次练很久，每天一点点更容易坚持。", "A little practice every day goes a long way.")}</p></div><label class="language-select"><select id="daily-goal" aria-label="${t("每日目标", "Daily goal")}">${[5, 10, 15, 20, 30].map((v) => `<option value="${v}" ${s().goal === v ? "selected" : ""}>${v} ${t("分钟", "minutes")}</option>`).join("")}</select>${icon("chevron-down")}</label></div></section><section class="settings-section"><h2>${t("你的学习数据", "Your learning data")}</h2><div class="setting-row"><div><strong>${t("本地保存，安心练习", "Local to your browser")}</strong><p>${t("进度只保存在当前浏览器。更换设备前，记得导出备份。", "Your progress stays in this browser. Export a backup before switching devices.")}</p></div></div><div class="data-actions"><button class="secondary-button" data-action="export">${icon("download")}${t("导出进度", "Export progress")}</button><button class="secondary-button" data-action="import">${icon("upload")}${t("导入备份", "Import backup")}</button><button class="danger-text" data-action="reset">${t("清除学习记录", "Clear learning history")}</button><input type="file" id="import-file" accept="application/json,.json" hidden></div><div id="reset-confirm" class="reset-confirm is-hidden"><p>${t("确定清除所有学习记录？此操作无法撤销，建议先导出备份。", "Clear all learning history? This cannot be undone. Consider exporting a backup first.")}</p><button class="danger-button" data-action="confirm-reset">${t("确认清除", "Clear history")}</button><button class="secondary-button" data-action="cancel-reset">${t("保留记录", "Keep history")}</button></div></section><p class="section-footnote">${t("标准 QWERTY 键盘 · 支持系统“减少动态效果”偏好 · 无需账户", "Standard QWERTY keyboard · Respects reduced motion · No account needed")}</p></div>`;
-  }
-  function guideDialog() {
-    return `<div class="dialog-backdrop"><dialog open aria-modal="true" aria-labelledby="guide-title" class="guide-dialog"><div class="dialog-top"><span class="eyebrow">${t("让身体轻松一点", "GET COMFORTABLE")}</span><button class="icon-button" data-action="close-dialog" aria-label="${t("关闭", "Close")}">${icon("x")}</button></div><h2 id="guide-title">${t("好姿势，让练习事半功倍。", "Good posture. Better practice.")}</h2><p class="dialog-intro">${t("不用绷紧，也不用追求完美。先从这四件小事开始。", "No tension. No perfection. Just four little things to keep in mind.")}</p><div class="posture-illustration"><svg viewBox="0 0 450 190" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M247 52h83v62h-83zM288 114v15m-18 0h36M128 133h222M143 133v47m194-47v47"/><circle cx="181" cy="38" r="17"/><path d="M175 58l-8 56 43 9 8 53m-50-64l-27 1m36-40 23 36 39 8m-107-45v71h49m-29 0v37"/></g><path d="M211 40h35" stroke="#5c7cda" stroke-width="2" stroke-dasharray="4 5"/><path d="M169 76a27 27 0 0 0 29 29" fill="none" stroke="#5c7cda" stroke-width="2"/><text x="211" y="32" fill="#73809a" font-size="12">50–70 cm</text></svg></div><div class="posture-tips">${[
-      [
-        t("坐稳，肩膀放松", "Sit tall, relax your shoulders"),
-        t(
-          "背部自然挺直，双脚平放地面。屏幕距离约 50–70 厘米。",
-          "Keep your back comfortably upright, feet flat, and screen about 50–70 cm away.",
+          : ""
+      }${settingRow(
+        t("键盘类型", "Keyboard type"),
+        select(
+          "keyboard-type",
+          s().keyboardType,
+          [
+            ["iso", "ISO"],
+            ["ansi", "ANSI"],
+          ],
+          t("键盘类型", "Keyboard type"),
         ),
-      ],
-      [
-        t("双手轻放，手腕放松", "Keep your hands light"),
-        t(
-          "手肘约呈直角，手腕自然悬放，不要用力压在桌沿。",
-          "Keep elbows roughly at a right angle and wrists neutral, without pressing on the desk.",
+      )}${settingRow(t("布局", "Layout"), '<span class="layout-label">QWERTY (US)</span>')}${settingRow(
+        t("打字速度", "Typing speed"),
+        select(
+          "speed-unit",
+          s().speedUnit,
+          [
+            ["characters", t("字符", "characters")],
+            ["words", t("单词", "words")],
+          ],
+          t("速度单位", "Speed unit"),
         ),
-      ],
-      [
-        t("找到 F 和 J 上的凸起", "Find the bumps on F and J"),
-        t(
-          "左手 A S D F，右手 J K L ;，拇指负责空格。每次敲击后回到基准键。",
-          "Left hand: A S D F. Right hand: J K L ;. Thumbs: space. Return home after each reach.",
+      )}</section>
+      <section class="drawer-section"><h2>${t("打字设置", "TYPING SETTINGS")}</h2>${settingRow(
+        t("文本显示", "Text behavior"),
+        select(
+          "text-lines",
+          s().textLines,
+          [
+            [1, t("单行", "One line")],
+            [2, t("双行", "Two lines")],
+          ],
+          t("文本显示", "Text behavior"),
         ),
-      ],
-      [
-        t("看屏幕，给自己一点时间", "Eyes up. Take your time."),
-        t(
-          "尽量不低头看键盘，先准确再提速。每练习 15–20 分钟，起身休息一下。",
-          "Try to look at the screen. Accuracy before speed. Take a short break every 15–20 minutes.",
-        ),
-      ],
-    ]
-      .map(
-        ([a, b], i) =>
-          `<div><span>${i + 1}</span><p><strong>${a}</strong><small>${b}</small></p></div>`,
-      )
-      .join(
-        "",
-      )}</div><p class="guide-disclaimer">${t("键盘与双手提示展示推荐指法，不会检测你的实际手势。", "Keyboard and hand hints show recommended technique; they do not detect your actual posture.")}</p><button class="primary-button full-width" data-action="close-dialog">${t("准备好了，开始练习", "I’m ready to practice")}</button></dialog></div>`;
+      )}${toggle("keyHints", t("显示按键提示", "Show key hints"))}${toggle("hands", t("显示双手提示", "Show hands hints"))}${toggle("keyboard", t("显示键盘", "Show keyboard"))}${toggle("sound", t("错误音效", "Error sound"))}</section>
+      <section class="drawer-section data-section"><h2>${t("学习数据", "LEARNING DATA")}</h2><p>${t("保存在当前浏览器。界面语言与练习语言独立设置。", "Saved in this browser. Interface and practice languages are independent.")}</p><div class="backup-actions"><button data-action="export">${t("导出进度", "Export progress")}</button><button data-action="import">${t("导入备份", "Import backup")}</button></div><button class="clear-history" data-action="request-reset">${t("清除学习记录", "Clear history")}</button><div class="reset-confirm is-hidden"><p>${t("确认清除？无法撤销，请先导出备份。", "Clear history? This cannot be undone. Export a backup first.")}</p><button data-action="confirm-reset">${t("确认清除", "Clear history")}</button><button data-action="cancel-reset">${t("取消", "Cancel")}</button></div></section>
+    </aside>`;
   }
-  function resultDialog(r: Result) {
-    const passed = r.accuracy >= 95 && r.speed >= 15 + r.course * 5;
-    const next =
-      s().automatic && !passed ? r.course : Math.min(6, r.course + 1);
-    const errors = Object.entries(r.errors)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-    return `<div class="dialog-backdrop"><dialog open aria-modal="true" aria-labelledby="result-title" class="result-dialog"><div class="dialog-top"><span class="eyebrow">${t("又一次小小的进步", "ANOTHER STEP FORWARD")}</span><button class="icon-button" data-action="close-dialog" aria-label="${t("关闭", "Close")}">${icon("x")}</button></div><div class="result-emblem">${icon(passed ? "trophy" : "check")}</div><h2 id="result-title">${passed ? t("这一步，走得很稳。", "A little practice. A big well done.") : t("练习完成，继续积累。", "Every little practice counts.")}</h2><p>${courseName(r.course, s())} · ${modeLabel()}</p><div class="result-metrics"><div><strong>${r.speed}</strong><span>${unit()}</span></div><div><strong>${r.accuracy}<small>%</small></strong><span>${t("准确率", "accuracy")}</span></div><div><strong>${clock(r.seconds)}</strong><span>${t("专注时间", "focused time")}</span></div></div><div class="result-feedback"><strong>${passed ? t("已达到本课目标", "Lesson target achieved") : t("给自己一点时间，准确比快更重要。", "Take your time. Accuracy comes before speed.")}</strong><p>${t("本课目标：", "Lesson target: ")}${15 + r.course * 5} ${unit()} · 95% ${t("准确率", "accuracy")}</p>${errors.length ? `<div class="result-weak">${t("下次多留意：", "Keep an eye on: ")}${errors.map(([k, n]) => `<kbd>${escape(k === " " ? "space" : k.toUpperCase())}<small> ×${n}</small></kbd>`).join("")}</div>` : `<p>${t("没有错键！保持这样的专注和放松。", "No mistakes! Keep that balance of focus and ease.")}</p>`}</div><div class="result-buttons"><button class="secondary-button" data-action="restart">${icon("rotate-ccw")}${t("再练一次", "Practice again")}</button><button class="primary-button" data-next="${next}">${next > r.course ? t("开始下一课", "Next lesson") : t("继续练习", "Keep practicing")}</button></div><button class="text-button result-stats" data-view="statistics">${t("查看学习统计", "See my progress")}</button></dialog></div>`;
+  function renderStatistics() {
+    const records = history();
+    const recent = records.slice(-40);
+    const best = (course: number) =>
+      Math.max(
+        0,
+        ...records
+          .filter(
+            (r) =>
+              r.course === course &&
+              r.accuracy === 100 &&
+              Object.values(r.errors).every((n) => n === 0),
+          )
+          .map((r) => r.speed),
+      );
+    const high = Math.max(
+      150,
+      Math.ceil(
+        Math.max(0, ...recent.map((r) => displayedSpeed(r.speed))) / 75,
+      ) * 75,
+    );
+    const selected = recent.find((r) => r.id === selectedBar);
+    const barErrors = (r: Result) =>
+      Object.values(r.errors).reduce((a, n) => a + n, 0);
+    return `<main class="statistics-screen" ${panel ? "inert" : ""}><button class="corner-button close-statistics" data-action="close-statistics" aria-label="${t("关闭统计", "Close statistics")}">${icon("circle-x")}</button><div class="statistics-content"><h1>${t("学习进度与速度记录", "Progress and speed records")}</h1><div class="statistics-filters"><span>${t("语言", "for")}</span>${select(
+      "content-language",
+      s().language,
+      [
+        ["en", t("英语", "English")],
+        ["zh", t("中文", "Chinese")],
+      ],
+      t("练习内容语言", "Practice content language"),
+    )}${
+      s().language === "zh"
+        ? select(
+            "chinese-mode",
+            s().chineseMode,
+            [
+              ["pinyin", t("拼音", "Pinyin")],
+              ["ime", t("输入法", "IME")],
+            ],
+            t("中文输入模式", "Chinese input mode"),
+          )
+        : ""
+    }<span>${t("布局", "layout")}</span><span class="blue-label">QWERTY (US)</span></div>
+      <div class="progress-ribbon" aria-label="${t("各课最佳成绩与星级", "Lesson records and ratings")}"><div class="main-lessons">${COURSES.map((_, i) => `<button class="ribbon-lesson lesson-${i}" data-stats-course="${i}"><span>${i === 6 ? t("专家", "Expert") : t(`第 ${i + 1} 课`, `Lesson ${i + 1}`)}</span><strong>${s().course === i && !records.some((r) => r.course === i && r.accuracy === 100 && Object.values(r.errors).every((n) => n === 0)) ? t("学习中", "learning") : displayedSpeed(best(i))}</strong><div class="stars" aria-label="${Math.min(3, Math.floor((isIME() ? best(i) : best(i) * 5) / 50) / 2)} ${t("星", "stars")}">${stars(best(i))}</div></button>`).join("")}</div><div class="extra-lessons">${[
+        ["numbers", t("数字", "Numbers")],
+        ["capitals", t("大写", "Capitals")],
+        ["punctuation", t("标点", "Punctuation")],
+      ]
+        .map(
+          ([key, name]) =>
+            `<button class="ribbon-lesson extra-lesson" data-special-course="${key}"><span>${name}</span><strong>${displayedSpeed(Math.max(0, ...records.filter((r) => r.course === 6 && r.accuracy === 100 && Object.values(r.errors).every((n) => n === 0) && r.extras?.[key as "numbers" | "capitals" | "punctuation"]).map((r) => r.speed)))}</strong><div class="stars">${stars(Math.max(0, ...records.filter((r) => r.course === 6 && r.accuracy === 100 && Object.values(r.errors).every((n) => n === 0) && r.extras?.[key as "numbers" | "capitals" | "punctuation"]).map((r) => r.speed)))}</div></button>`,
+        )
+        .join("")}</div></div>
+      <section class="activity-chart" aria-label="${t("练习速度与错字柱状图", "Session speed and typo chart")}"><div class="chart-grid"><div class="grid-line top"><span>${high}</span></div><div class="grid-line middle"><span>${Math.round(high / 2)}</span></div><div class="grid-line baseline"><span>${t("速度", "Speed")}<b>0</b>${t("错字", "Typos")}</span></div></div><div class="chart-bars">${recent.map((r) => `<button class="chart-column ${selectedBar === r.id ? "selected" : ""}" data-record="${esc(r.id)}" aria-label="${new Date(r.at).toLocaleString(s().locale)} · ${displayedSpeed(r.speed)} ${unit()} · ${barErrors(r)} ${t("错字", "typos")}"><span class="speed-bar" style="height:${Math.max(1, (displayedSpeed(r.speed) / high) * 100)}%"></span><span class="typo-bar" style="height:${Math.min(22, barErrors(r) * 2 + 1)}%"></span><span class="chart-tooltip">${displayedSpeed(r.speed)} ${unit()}<br>${r.accuracy}% · ${barErrors(r)} ${t("错字", "typos")}</span></button>`).join("")}</div>${!recent.length ? renderEmptyChart() : ""}</section>
+      <div class="chart-caption">${t("近期练习结果", "Results for recent activities")}</div>
+      ${selected ? `<div class="record-details"><strong>${new Date(selected.at).toLocaleString(s().locale)}</strong><span>${selected.course === 6 ? t("专家", "Expert") : t(`第 ${selected.course + 1} 课`, `Lesson ${selected.course + 1}`)}</span><span>${displayedSpeed(selected.speed)} ${unit()}</span><span>${selected.accuracy}% ${t("准确率", "accuracy")}</span><span>${barErrors(selected)} ${t("错字", "typos")}</span></div>` : ""}
+      </div></main>`;
   }
-  function closeDialog() {
-    const wasGuide = showGuide;
-    showGuide = false;
-    showResult = false;
-    render();
-    if (wasGuide && view === "practice") {
-      session.resume(performance.now());
-      render();
-      focusInput();
-    } else if (session.done && view === "practice") newSession();
-    else restoreFocus?.focus();
+  function renderEmptyChart() {
+    // The reference app uses a muted chart illustration before the first session.
+    // This is an illustration, not recorded sessions or fabricated results.
+    const heights = [
+      23, 76, 151, 94, 38, 65, 118, 17, 102, 89, 44, 155, 13, 71, 108, 24, 91,
+      129, 53, 167, 39, 82, 113, 31, 95, 142, 66, 12, 89, 135, 47, 158, 105, 27,
+      73, 119, 58, 146, 84, 21,
+    ];
+    return `<svg class="empty-chart-illustration" viewBox="0 0 1000 200" preserveAspectRatio="none" aria-hidden="true">${Array.from(
+      { length: 80 },
+      (_, i) => {
+        const h = heights[i % heights.length];
+        return `<rect x="${i * 12.5}" y="${160 - h * 0.9}" width="11.2" height="${h * 0.9}"/><rect x="${i * 12.5}" y="164" width="11.2" height="${7 + h * 0.16}"/>`;
+      },
+    ).join(
+      "",
+    )}</svg><span class="sr-only">${t("暂无练习记录；图表为占位示意。", "No recorded sessions yet. Chart is a placeholder illustration.")}</span>`;
+  }
+  function renderHelp() {
+    return `<div class="help-backdrop"><section class="help-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title"><button class="dialog-close" data-action="close-panel" aria-label="${t("关闭", "Close")}">${icon("circle-x")}</button><h1 id="help-title">${t("学习触摸打字", "Learn to touch type")}</h1><div class="help-hands">${renderHands()}</div><div class="help-copy"><h2>${t("双手回到基准键", "Find your home keys")}</h2><p>${t("左手 A S D F，右手 J K L ;。食指找到 F 和 J 的凸起，拇指轻放空格键。按键时只移动对应的手指。", "Left hand: A S D F. Right hand: J K L ;. Find the bumps on F and J with your index fingers. Rest your thumbs on the space bar.")}</p><h2>${t("放松，保持自然坐姿", "Keep a relaxed posture")}</h2><p>${t("肩膀放松，手腕保持自然。双脚平放，屏幕与眼睛保持舒适距离。尽量看屏幕，不要低头找键。", "Relax your shoulders and keep your wrists neutral. Put your feet flat on the floor. Look at the screen instead of down at your keyboard.")}</p><h2>${t("准确优先，循序渐进", "Accuracy comes first")}</h2><p>${t("自动模式下，完整且无错地完成课程后进阶；手动模式可自由选课。错误会显示为红色。每 15–20 分钟休息一次。", "In Automatic mode, finish a lesson without mistakes to advance. Manual mode lets you choose any lesson. Typos appear in red. Take a break every 15–20 minutes.")}</p><div class="shortcuts"><span><kbd>Return</kbd>${t("重新练习 / 继续", "Restart / continue")}</span><span><kbd>Esc</kbd>${t("暂停 / 关闭设置", "Pause / close settings")}</span></div><p class="help-note">${t("手指提示用于指引，不会检测你的实际姿势。中文全拼不带声调，ü 用 v 表示。", "Hand hints guide you; they do not detect your actual posture. Pinyin uses no tone marks, and v for ü.")}</p></div><button class="help-start" data-action="close-panel">${t("开始练习", "Start practicing")}</button></section></div>`;
   }
   async function importBackup(file: File) {
     try {
@@ -566,120 +575,101 @@ export function mountTutor(root: HTMLElement) {
       )
         throw new Error("shape");
       const incoming = parseData(raw);
-      const merged = new Map(
-        [...data.history, ...incoming.history].map((r) => [r.id, r]),
-      );
-      data.history = [...merged.values()]
+      data.history = [
+        ...new Map(
+          [...data.history, ...incoming.history].map((r) => [r.id, r]),
+        ).values(),
+      ]
         .sort((a, b) => a.at - b.at)
         .slice(-2000);
       data.settings = incoming.settings;
-      persist();
-      newSession();
-      notify(
-        t(
-          "备份已导入，练习记录已合并。",
-          "Backup imported. Your session history has been merged.",
-        ),
-      );
+      restart();
+      notify(t("备份已导入，记录已合并。", "Backup imported. History merged."));
     } catch {
       notify(
         t(
-          "无法导入：请选择有效的 DAZI 进度备份（不超过 5 MB）。",
+          "无法导入，请选择有效的 DAZI 备份（不超过 5 MB）。",
           "Could not import. Choose a valid DAZI backup under 5 MB.",
         ),
       );
     }
   }
+  function continueLesson() {
+    const passed = session.done && typoCount() === 0;
+    restart(s().automatic && passed ? Math.min(6, s().course + 1) : s().course);
+  }
+  function exportBackup() {
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dazi-progress-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify(t("进度备份已导出。", "Your progress backup has been exported."));
+  }
   function bind() {
-    root
-      .querySelectorAll<HTMLButtonElement>("[data-view]")
-      .forEach((el) => (el.onclick = () => navigate(el.dataset.view as View)));
-    root.querySelector<HTMLAnchorElement>(".brand")!.onclick = (e) => {
-      e.preventDefault();
-      navigate("practice");
-    };
     root.querySelectorAll<HTMLButtonElement>("[data-action]").forEach(
       (el) =>
         (el.onclick = () => {
-          const action = el.dataset.action;
-          if (action === "locale")
-            changeSetting("locale", s().locale === "zh" ? "en" : "zh");
-          else if (action === "restart") newSession();
-          else if (action === "pause") pauseToggle();
-          else if (action === "resume") {
-            session.resume(performance.now());
-            focused = true;
-            render();
-            focusInput();
-          } else if (
-            action === "sound" ||
-            action === "keyboard" ||
-            action === "hands"
-          )
-            changeSetting(action, !s()[action]);
-          else if (action === "guide") {
-            restoreFocus = el;
-            session.pause(performance.now());
-            showGuide = true;
-            render();
-          } else if (action === "close-dialog") closeDialog();
-          else if (action === "auto" || action === "manual")
-            changeSetting("automatic", action === "auto");
-          else if (action === "export") {
-            const url = URL.createObjectURL(
-              new Blob([JSON.stringify(data, null, 2)], {
-                type: "application/json",
-              }),
-            );
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `dazi-progress-${new Date().toISOString().slice(0, 10)}.json`;
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-            notify(
-              t("进度备份已导出。", "Your progress backup has been exported."),
-            );
-          } else if (action === "import")
-            root.querySelector<HTMLInputElement>("#import-file")?.click();
-          else if (action === "reset" || action === "cancel-reset")
-            root
-              .querySelector("#reset-confirm")
-              ?.classList.toggle("is-hidden", action === "cancel-reset");
-          else if (action === "confirm-reset") {
-            data.history = [];
-            persist();
-            newSession();
-            notify(
-              t(
-                "学习记录已清除，偏好设置已保留。",
-                "Learning history cleared. Your preferences are preserved.",
-              ),
-            );
+          switch (el.dataset.action) {
+            case "settings":
+              openPanel("settings");
+              break;
+            case "help":
+              openPanel("help");
+              break;
+            case "close-panel":
+              closePanel();
+              break;
+            case "statistics":
+              openStatistics();
+              break;
+            case "close-statistics":
+              closeStatistics();
+              break;
+            case "restart":
+              restart();
+              break;
+            case "continue":
+              continueLesson();
+              break;
+            case "resume":
+              session.resume(performance.now());
+              focused = true;
+              render();
+              focusInput();
+              break;
+            case "automatic":
+              setSetting("automatic", true);
+              break;
+            case "manual":
+              setSetting("automatic", false);
+              break;
+            case "export":
+              exportBackup();
+              break;
+            case "import":
+              root.querySelector<HTMLInputElement>("#import-file")?.click();
+              break;
+            case "request-reset":
+              root
+                .querySelector(".reset-confirm")
+                ?.classList.remove("is-hidden");
+              break;
+            case "cancel-reset":
+              root.querySelector(".reset-confirm")?.classList.add("is-hidden");
+              break;
+            case "confirm-reset":
+              data.history = [];
+              save();
+              restart(0);
+              notify(t("学习记录已清除。", "Learning history cleared."));
+              break;
           }
         }),
     );
-    root.querySelectorAll<HTMLButtonElement>("[data-course]").forEach(
-      (el) =>
-        (el.onclick = () => {
-          const n = Number(el.dataset.course);
-          if (s().automatic && !lessonUnlocked(n, relevant(), s())) {
-            notify(
-              t(
-                "先完成上一课，或切换到「自由选课」。",
-                "Pass the previous lesson, or switch to Manual.",
-              ),
-            );
-            return;
-          }
-          view = "practice";
-          newSession(n);
-        }),
-    );
-    root
-      .querySelectorAll<HTMLButtonElement>("[data-next]")
-      .forEach(
-        (el) => (el.onclick = () => newSession(Number(el.dataset.next))),
-      );
     root.querySelectorAll<HTMLButtonElement>("[data-toggle]").forEach(
       (el) =>
         (el.onclick = () => {
@@ -687,29 +677,76 @@ export function mountTutor(root: HTMLElement) {
             | "sound"
             | "keyboard"
             | "hands"
-            | "automatic";
-          changeSetting(key, !s()[key]);
+            | "keyHints"
+            | "capitals"
+            | "numbers"
+            | "punctuation";
+          setSetting(key, !s()[key]);
         }),
     );
-    const select = (id: string, cb: (value: string) => void) => {
+    root
+      .querySelectorAll<HTMLButtonElement>("[data-course]")
+      .forEach(
+        (el) =>
+          (el.onclick = () => setSetting("course", Number(el.dataset.course))),
+      );
+    root.querySelectorAll<HTMLButtonElement>("[data-stats-course]").forEach(
+      (el) =>
+        (el.onclick = () => {
+          const course = Number(el.dataset.statsCourse);
+          if (s().automatic && !lessonUnlocked(course, history(), s())) {
+            notify(
+              t(
+                "先完成上一课，或在设置中选择手动模式。",
+                "Finish the previous lesson, or choose Manual mode in settings.",
+              ),
+            );
+            return;
+          }
+          statistics = false;
+          restart(course);
+        }),
+    );
+    root.querySelectorAll<HTMLButtonElement>("[data-special-course]").forEach(
+      (el) =>
+        (el.onclick = () => {
+          const key = el.dataset.specialCourse as
+            | "capitals"
+            | "numbers"
+            | "punctuation";
+          s()[key] = true;
+          s().automatic = false;
+          statistics = false;
+          restart(6);
+        }),
+    );
+    root.querySelectorAll<HTMLButtonElement>("[data-record]").forEach(
+      (el) =>
+        (el.onclick = () => {
+          selectedBar = el.dataset.record || null;
+          render();
+        }),
+    );
+    const onSelect = (id: string, cb: (v: string) => void) => {
       const el = root.querySelector<HTMLSelectElement>("#" + id);
       if (el) el.onchange = () => cb(el.value);
     };
-    select("content-language", (v) =>
-      changeSetting("language", v as "zh" | "en"),
+    onSelect("interface-language", (v) =>
+      setSetting("locale", v as "zh" | "en"),
     );
-    select("interface-language", (v) =>
-      changeSetting("locale", v as "zh" | "en"),
+    onSelect("content-language", (v) =>
+      setSetting("language", v as "zh" | "en"),
     );
-    select("chinese-mode", (v) =>
-      changeSetting("chineseMode", v as "pinyin" | "ime"),
+    onSelect("chinese-mode", (v) =>
+      setSetting("chineseMode", v as "pinyin" | "ime"),
     );
-    select("duration", (v) => changeSetting("duration", Number(v)));
-    select("daily-goal", (v) => changeSetting("goal", Number(v)));
-    select("stats-filter", (v) => {
-      statsFilter = v as "all" | "week";
-      render();
-    });
+    onSelect("keyboard-type", (v) =>
+      setSetting("keyboardType", v as "iso" | "ansi"),
+    );
+    onSelect("speed-unit", (v) =>
+      setSetting("speedUnit", v as "characters" | "words"),
+    );
+    onSelect("text-lines", (v) => setSetting("textLines", Number(v) as 1 | 2));
     const file = root.querySelector<HTMLInputElement>("#import-file");
     if (file)
       file.onchange = () => {
@@ -719,52 +756,46 @@ export function mountTutor(root: HTMLElement) {
     if (input) {
       input.onfocus = () => {
         focused = true;
-        updatePractice();
+        update();
       };
       input.onblur = (e) => {
-        if (session.done || showGuide || showResult) return;
-        const next = e.relatedTarget;
+        if (session.done || panel || statistics) return;
         if (
-          next instanceof HTMLElement &&
-          root.contains(next) &&
-          next.closest("button,select,a,input")
+          e.relatedTarget instanceof HTMLElement &&
+          root.contains(e.relatedTarget) &&
+          e.relatedTarget.closest("button,select,a,input")
         )
           return;
         focused = false;
         session.pause(performance.now());
         input.disabled = true;
-        updatePractice();
-        const pause = root.querySelector('[data-action="pause"]');
-        if (pause) pause.innerHTML = icon("play");
+        update();
       };
       input.addEventListener("compositionstart", () => {
         composing = true;
       });
       input.addEventListener("compositionend", (e) => {
         composing = false;
-        suppressCompositionInput = e.data;
+        compositionCommit = e.data;
         if (isIME()) accept(e.data);
         else
           notify(
             t(
-              "请切换至英文输入法，直接敲击字母。",
-              "Switch to your English keyboard to type individual letters.",
+              "请切换到英文输入法练习字母。",
+              "Switch to an English keyboard to practice individual letters.",
             ),
           );
         input.value = "";
         setTimeout(() => {
-          suppressCompositionInput = "";
+          compositionCommit = "";
         }, 0);
       });
       input.oninput = (e) => {
         const event = e as InputEvent;
         if (composing || event.isComposing) return;
-        if (
-          suppressCompositionInput &&
-          event.data === suppressCompositionInput
-        ) {
+        if (compositionCommit && event.data === compositionCommit) {
           input.value = "";
-          suppressCompositionInput = "";
+          compositionCommit = "";
           return;
         }
         if (event.inputType === "insertFromPaste") {
@@ -778,53 +809,57 @@ export function mountTutor(root: HTMLElement) {
         e.preventDefault();
         notify(
           t(
-            "试着亲手敲出来，让手指记住。",
-            "Try typing it yourself. That’s how muscle memory grows.",
+            "请用键盘亲手输入练习文字。",
+            "Type the exercise with your keyboard.",
           ),
         );
       };
       input.onkeydown = (e) => {
+        if (composing || e.isComposing || e.keyCode === 229) return;
         if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
           pauseToggle();
-          return;
-        }
-        if (composing || e.isComposing || e.keyCode === 229) return;
-        if (e.key === "Backspace") {
+        } else if (e.key === "Enter") {
           e.preventDefault();
+          e.stopPropagation();
+          restart();
+        } else if (e.key === "Backspace") {
+          e.preventDefault();
+          const old = session.position;
           session.backspace();
-          updatePractice();
-        } else if (e.key === "Enter" && !isIME()) e.preventDefault();
-        else if (e.key === "Tab") return;
+          updateLetters(session.position);
+          if (old !== session.position) update();
+        }
       };
     }
-    const box = root.querySelector<HTMLElement>("#typing-box");
-    if (box)
-      box.onclick = (e) => {
-        if (!(e.target as HTMLElement).closest("button") && !session.paused)
-          focusInput();
-      };
-    const overlay = root.querySelector<HTMLElement>("#practice-overlay");
-    if (overlay && !session.paused)
-      overlay.onclick = () => {
-        focused = true;
+    const strip = root.querySelector<HTMLElement>(".practice-strip");
+    if (strip)
+      strip.onclick = (e) => {
+        if (
+          (e.target as HTMLElement).closest("button") ||
+          session.done ||
+          session.paused
+        )
+          return;
         focusInput();
-        updatePractice();
       };
   }
-  const onDocumentKey = (e: KeyboardEvent) => {
-    if (showGuide || showResult) {
+  function documentKey(e: KeyboardEvent) {
+    if (e.isComposing) return;
+    if (panel) {
       if (e.key === "Escape") {
         e.preventDefault();
-        closeDialog();
+        closePanel();
       }
       if (e.key === "Tab") {
-        const buttons = [
-          ...root.querySelectorAll<HTMLButtonElement>("dialog button"),
-        ].filter((b) => !b.disabled);
-        const first = buttons[0],
-          last = buttons[buttons.length - 1];
+        const elements = [
+          ...root.querySelectorAll<HTMLElement>(
+            ".drawer button,.drawer select,.help-dialog button",
+          ),
+        ];
+        const first = elements[0],
+          last = elements[elements.length - 1];
         if (e.shiftKey && document.activeElement === first) {
           e.preventDefault();
           last?.focus();
@@ -835,44 +870,55 @@ export function mountTutor(root: HTMLElement) {
       }
       return;
     }
-    if (
-      view === "practice" &&
-      e.key === "Escape" &&
-      e.target !== root.querySelector("#typing-input")
-    ) {
+    if (statistics) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeStatistics();
+      }
+      return;
+    }
+    if (e.target === root.querySelector("#typing-input")) return;
+    const interactive =
+      e.target instanceof HTMLElement &&
+      e.target.closest("button,select,input,a");
+    if (e.key === "Enter" && !interactive) {
+      e.preventDefault();
+      session.done ? continueLesson() : restart();
+    }
+    if (e.key === "Escape") {
       e.preventDefault();
       pauseToggle();
     }
-  };
-  document.addEventListener("keydown", onDocumentKey);
+  }
   const blur = () => {
-    if (view === "practice" && !session.done && !session.paused) {
+    if (!statistics && !panel && !session.done && !session.paused) {
+      focused = false;
       session.pause(performance.now());
       render();
     }
   };
-  window.addEventListener("blur", blur);
   const visibility = () => {
     if (document.hidden) blur();
   };
+  document.addEventListener("keydown", documentKey);
+  window.addEventListener("blur", blur);
   document.addEventListener("visibilitychange", visibility);
+  const interval = setInterval(() => {
+    if (!statistics && !panel && !session.done && !session.paused && focused)
+      update();
+  }, 200);
+  const resize = () => updateTextPosition();
+  window.addEventListener("resize", resize);
   render();
   focusInput();
-  const interval = setInterval(() => {
-    if (
-      view === "practice" &&
-      session.started !== null &&
-      !session.done &&
-      !session.paused
-    )
-      updatePractice();
-  }, 250);
   return () => {
     clearInterval(interval);
-    clearTimeout(toastTimeout);
-    document.removeEventListener("keydown", onDocumentKey);
+    clearTimeout(toastTimer);
+    clearTimeout(errorTimer);
+    document.removeEventListener("keydown", documentKey);
     window.removeEventListener("blur", blur);
     document.removeEventListener("visibilitychange", visibility);
+    window.removeEventListener("resize", resize);
     void audio?.close();
   };
 }

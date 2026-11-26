@@ -1,77 +1,76 @@
 import type { Settings } from "./model";
+// Six cumulative frequency-based lessons followed by the Expert exercise.
+// E T A O is the first letter group observed in the installed reference app.
 export const COURSES = [
   {
-    zh: "回到基准键",
-    en: "Find your home row",
-    keys: "ASDF JKL;",
-    chars: "asdfjkl; ",
-    words: "a sad lad asks dad all lads fall flask salad lass ask dad fall",
-    hintZh: "食指轻放 F 和 J，其余手指自然落在基准键上。",
-    hintEn:
-      "Rest your index fingers on F and J. Let the other fingers find their home keys.",
-  },
-  {
-    zh: "食指的延伸",
-    en: "A little further",
-    keys: "+ E I R U",
-    chars: "asdfjkl;eiru ",
+    zh: "第 1 课",
+    en: "Lesson 1",
+    keys: "E T A O",
+    chars: "etao ",
     words:
-      "a sure rule is ideal ride sure fire like rural air said dear lake side file idea slide",
-    hintZh: "手指向上伸出后，记得回到自己的基准键。",
-    hintEn: "Reach gently for the upper keys, then return to the home row.",
+      "toe aette toe tata too tattoo tea t toe e et toe at eat tate tee toto tattoo ate o tattoo tee at ate",
+    hintZh: "",
+    hintEn: "",
   },
   {
-    zh: "连接左右手",
-    en: "Bring your hands together",
-    keys: "+ G H T Y",
-    chars: "asdfjkl;eirughty ",
+    zh: "第 2 课",
+    en: "Lesson 2",
+    keys: "E T A O I N",
+    chars: "etaoin ",
     words:
-      "the light is right a great day a little fresh air right here stay true share the light",
-    hintZh: "G、H 分别由左右食指负责，保持手腕放松。",
-    hintEn:
-      "Use your left index finger for G and your right index finger for H.",
+      "into note nation tone notion attention innate atone annotation attain intonation anoint ion one nine ten",
+    hintZh: "",
+    hintEn: "",
   },
   {
-    zh: "掌握上排键",
-    en: "Explore the top row",
-    keys: "+ Q W O P",
-    chars: "asdfjkl;qwertyuiopgh ",
+    zh: "第 3 课",
+    en: "Lesson 3",
+    keys: "E T A O I N S H R",
+    chars: "etaoinshr ",
     words:
-      "quiet words flow with ease write your story take the way to grow a happy little world",
-    hintZh: "小指负责 Q 和 P，手掌保持稳定，不必抬起整个手臂。",
-    hintEn: "Your pinkies handle Q and P. Keep your hands relaxed and steady.",
+      "there is another reason to share stories in the rain the star shines on the eastern shore a star is in the air",
+    hintZh: "",
+    hintEn: "",
   },
   {
-    zh: "完整的字母表",
-    en: "The whole alphabet",
-    keys: "+ Z X C V B N M",
+    zh: "第 4 课",
+    en: "Lesson 4",
+    keys: "E T A O I N S H R D L U",
+    chars: "etaoinshrdlu ",
+    words:
+      "little red shoes in the sun the road leads to a silent house learn to read and understand listen to the sound around us",
+    hintZh: "",
+    hintEn: "",
+  },
+  {
+    zh: "第 5 课",
+    en: "Lesson 5",
+    keys: "+ C M F W Y G P B",
+    chars: "etaoinshrdlucmfwygpb ",
+    words:
+      "practice brings progress a calm mind finds a way forward the bright morning brings a new beginning small steps become great things",
+    hintZh: "",
+    hintEn: "",
+  },
+  {
+    zh: "第 6 课",
+    en: "Lesson 6",
+    keys: "+ V K X J Q Z",
     chars: "abcdefghijklmnopqrstuvwxyz ",
     words:
-      "small steps make a big difference practice brings progress the quick brown fox jumps over the lazy dog keep moving with a calm mind",
-    hintZh: "练习下排键时，保持指尖弯曲，敲击后回到基准键。",
-    hintEn:
-      "Keep your fingers curved as you reach down. Always come back home.",
+      "the quick brown fox jumps over the lazy dog every small step brings a fresh perspective practice your skills with patience and keep moving forward",
+    hintZh: "",
+    hintEn: "",
   },
   {
-    zh: "自然地表达",
-    en: "Let the words flow",
-    keys: "Aa , . ! ?",
+    zh: "专家",
+    en: "Expert",
+    keys: "A–Z",
     chars: "all",
     words:
-      "Small steps make a big difference. Give yourself time to learn. A quiet mind helps your fingers find their way. Progress begins with a little practice, every day. What will you create today?",
-    hintZh: "优先保持准确和节奏，速度会随着练习自然提升。",
-    hintEn: "Focus on accuracy and a steady rhythm. Speed will follow.",
-  },
-  {
-    zh: "从容应对每个键",
-    en: "Make every key yours",
-    keys: "123 @ # : ;",
-    chars: "all",
-    words:
-      "Set a goal: practice for 15 minutes, 5 days a week. On day 7, take a break! A journey of 1,000 miles begins with a single step. Write 3 ideas before 9:30, then choose your favorite.",
-    hintZh: "数字与符号也有对应手指；大写字母使用另一只手的 Shift。",
-    hintEn:
-      "Use the opposite hand for Shift. Give numbers and symbols the same care as letters.",
+      "the rhythm of the rain settles into a quiet afternoon a new chapter begins with a single word let your fingers find their own familiar path across the keys",
+    hintZh: "",
+    hintEn: "",
   },
 ];
 const CHINESE: Array<Array<[string, string]>> = [
@@ -174,39 +173,58 @@ export function makeExercise(
       { length: i < 2 ? 8 * settings.duration : settings.duration + 1 },
       (_, n) => pool[(start + n) % pool.length],
     );
-    const source = selected.map((x) => x[0]).join(i < 4 ? "，" : "");
-    const pinyin = selected.map((x) => x[1]).join(" ");
-    return { source, text: settings.chineseMode === "ime" ? source : pinyin };
-  }
-  const courseData = COURSES[i];
-  if (i < 5) {
-    const words = courseData.words.split(" ");
-    const preferred = weak ? words.filter((w) => w.includes(weak)) : [];
-    const pool = preferred.length ? preferred : words;
-    const start = Math.min(pool.length - 1, Math.floor(rng() * pool.length));
+    const decorated = selected.map(([han, latin], n) => {
+      let source = settings.punctuation
+        ? han
+        : han.replace(/[，。！？；：、,.!?;]/g, "");
+      let pinyin = settings.punctuation ? latin : latin.replace(/[,.;!?]/g, "");
+      if (settings.capitals)
+        pinyin = pinyin.charAt(0).toUpperCase() + pinyin.slice(1);
+      if (settings.numbers && n % 3 === 0) {
+        const number = String((n * 17 + 3) % 100);
+        source += number;
+        pinyin += " " + number;
+      }
+      if (settings.punctuation && !/[。！？]$/.test(source)) {
+        source += n === selected.length - 1 ? "。" : "，";
+        pinyin += n === selected.length - 1 ? "." : ",";
+      }
+      return { source, pinyin };
+    });
+    const source = decorated.map((x) => x.source).join("");
     return {
-      source: "",
-      text: Array.from(
-        { length: 24 * settings.duration },
-        (_, n) => pool[(start + n) % pool.length],
-      ).join(" "),
+      source,
+      text:
+        settings.chineseMode === "ime"
+          ? source
+          : decorated.map((x) => x.pinyin).join(" "),
     };
   }
-  const sentences = courseData.words.match(/[^.!?]+[.!?]/g) || [
-    courseData.words,
-  ];
+
+  const courseData = COURSES[i];
+  const words = courseData.words.split(" ");
   const preferred = weak
-    ? sentences.filter((x) => x.toLowerCase().includes(weak))
+    ? words.filter((w) => w.includes(weak.toLowerCase()))
     : [];
-  const pool = preferred.length ? preferred : sentences;
+  const pool = preferred.length ? preferred : words;
   const start = Math.min(pool.length - 1, Math.floor(rng() * pool.length));
-  return {
-    source: "",
-    text: Array.from({ length: 2 * settings.duration }, (_, n) =>
-      pool[(start + n) % pool.length].trim(),
-    ).join(" "),
-  };
+  const selected = Array.from(
+    { length: 24 * settings.duration },
+    (_, n) => pool[(start + n) % pool.length],
+  );
+  const decorated = selected.map((word, n) => {
+    let result =
+      settings.capitals && n % 5 === 0
+        ? word[0].toUpperCase() + word.slice(1)
+        : word;
+    if (settings.numbers && n % 7 === 3) result += " " + ((n * 17 + 3) % 100);
+    if (settings.punctuation && n % 6 === 4)
+      result += [",", ".", ";", "?", "!"][Math.floor(n / 6) % 5];
+    return result;
+  });
+  return { source: "", text: decorated.join(" ") };
 }
+
 export const KEY_ROWS = [
   [
     "`",

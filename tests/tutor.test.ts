@@ -79,13 +79,13 @@ describe("desktop tutor learning behavior", () => {
   });
   it("adds practice for weak keys using words valid for the lesson", () => {
     const baseline = makeExercise(0, defaultSettings(), {}, () => 0).text;
-    const adapted = makeExercise(0, defaultSettings(), { k: 8 }, () => 0).text;
+    const adapted = makeExercise(0, defaultSettings(), { t: 8 }, () => 0).text;
     expect(
-      adapted.split(" ").filter((word) => word.includes("k")).length,
+      adapted.split(" ").filter((word) => word.includes("t")).length,
     ).toBeGreaterThan(
-      baseline.split(" ").filter((word) => word.includes("k")).length,
+      baseline.split(" ").filter((word) => word.includes("t")).length,
     );
-    expect(adapted).toMatch(/^[asdfjkl; ]+$/);
+    expect(adapted).toMatch(/^[etao ]+$/);
   });
   it("adapts Chinese pinyin practice to recently missed letters", () => {
     const settings = { ...defaultSettings(), language: "zh" as const };
@@ -105,7 +105,7 @@ describe("desktop tutor learning behavior", () => {
         language: "en" as const,
         mode: "pinyin" as const,
         speed: 30,
-        accuracy: 98,
+        accuracy: 100,
         seconds: 60,
         at: 1,
         errors: {},
@@ -133,7 +133,7 @@ describe("resilient local data", () => {
     const data = readData(storage);
     expect(data.settings.locale).toBe("zh");
     expect(data.settings.language).toBe("zh");
-    expect(data.settings.sound).toBe(false);
+    expect(data.settings.sound).toBe(true);
     expect(data.history).toEqual([]);
   });
   it("round trips preferences without failing when storage is full", () => {
@@ -156,5 +156,75 @@ describe("resilient local data", () => {
         },
       }),
     ).toBe(false);
+  });
+});
+
+describe("KeyKey replica behavior", () => {
+  it("defaults to an ISO keyboard, character speed and one line", () => {
+    const settings = defaultSettings();
+    expect(settings.keyboardType).toBe("iso");
+    expect(settings.speedUnit).toBe("characters");
+    expect(settings.textLines).toBe(1);
+    expect(settings.keyHints).toBe(true);
+  });
+  it("starts the first lesson with the original E T A O letter group", () => {
+    const text = makeExercise(0, defaultSettings(), {}, () => 0).text;
+    expect(text).toMatch(/^[etao ]+$/);
+  });
+  it("supports advancing and showing a typo without blocking the exercise", () => {
+    const s = new Session("tea", 0, false, true);
+    s.input("txa", 1000);
+    expect(s.done).toBe(true);
+    expect(s.mistakes).toEqual({ 1: "x" });
+    expect(s.errors).toEqual({ e: 1 });
+    expect(s.metrics(1000).accuracy).toBe(67);
+  });
+  it("adds optional capitals, numbers and punctuation to an exercise", () => {
+    const settings = {
+      ...defaultSettings(),
+      capitals: true,
+      numbers: true,
+      punctuation: true,
+    };
+    const text = makeExercise(0, settings, {}, () => 0).text;
+    expect(text).toMatch(/[A-Z]/);
+    expect(text).toMatch(/[0-9]/);
+    expect(text).toMatch(/[,.;!?]/);
+  });
+});
+
+describe("reference progression and bilingual exercise options", () => {
+  it("does not unlock a lesson when rounded accuracy hides a typo", () => {
+    const history = [
+      {
+        id: "rounded",
+        course: 0,
+        language: "en" as const,
+        mode: "pinyin" as const,
+        speed: 60,
+        accuracy: 100,
+        seconds: 60,
+        at: 1,
+        errors: { e: 1 },
+        count: 300,
+      },
+    ];
+    expect(lessonUnlocked(1, history, defaultSettings())).toBe(false);
+  });
+  it("respects Chinese number and punctuation switches in both modes", () => {
+    const base = { ...defaultSettings(), language: "zh" as const };
+    expect(makeExercise(5, base, {}, () => 0).text).not.toMatch(
+      /[,.;!?，。！？\d]/,
+    );
+    for (const mode of ["pinyin", "ime"] as const) {
+      const exercise = makeExercise(
+        0,
+        { ...base, chineseMode: mode, numbers: true, punctuation: true },
+        {},
+        () => 0,
+      );
+      expect(exercise.text).toMatch(/\d/);
+      expect(exercise.text).toMatch(/[,.;!?，。！？]/);
+    }
   });
 });

@@ -1,6 +1,13 @@
 export type Locale = "zh" | "en";
 export type Settings = {
   locale: Locale;
+  keyboardType: "iso" | "ansi";
+  speedUnit: "characters" | "words";
+  textLines: 1 | 2;
+  capitals: boolean;
+  numbers: boolean;
+  punctuation: boolean;
+  keyHints: boolean;
   language: Locale;
   chineseMode: "pinyin" | "ime";
   sound: boolean;
@@ -12,6 +19,7 @@ export type Settings = {
   duration: number;
 };
 export type Result = {
+  extras?: { capitals: boolean; numbers: boolean; punctuation: boolean };
   id: string;
   course: number;
   language: Locale;
@@ -27,9 +35,16 @@ export type Data = { version: 1; settings: Settings; history: Result[] };
 export const STORAGE_KEY = "dazi.tutor.v1";
 export const defaultSettings = (): Settings => ({
   locale: "zh",
+  keyboardType: "iso",
+  speedUnit: "characters",
+  textLines: 1,
+  capitals: false,
+  numbers: false,
+  punctuation: false,
+  keyHints: true,
   language: "en",
   chineseMode: "pinyin",
-  sound: false,
+  sound: true,
   keyboard: true,
   hands: true,
   automatic: true,
@@ -44,6 +59,12 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 export function validResult(v: unknown): v is Result {
   if (!isObject(v)) return false;
   return (
+    (v.extras === undefined ||
+      (isObject(v.extras) &&
+        ["capitals", "numbers", "punctuation"].every(
+          (key) =>
+            typeof (v.extras as Record<string, unknown>)[key] === "boolean",
+        ))) &&
     typeof v.id === "string" &&
     Number.isInteger(v.course) &&
     (v.course as number) >= 0 &&
@@ -76,8 +97,23 @@ export function parseData(value: unknown): Data {
       if (s[key] === "en" || s[key] === "zh") settings[key] = s[key];
     if (s.chineseMode === "ime" || s.chineseMode === "pinyin")
       settings.chineseMode = s.chineseMode;
-    for (const key of ["sound", "keyboard", "hands", "automatic"] as const)
+    for (const key of [
+      "sound",
+      "keyboard",
+      "hands",
+      "automatic",
+      "keyHints",
+      "capitals",
+      "numbers",
+      "punctuation",
+    ] as const)
       if (typeof s[key] === "boolean") settings[key] = s[key];
+    if (s.keyboardType === "iso" || s.keyboardType === "ansi")
+      settings.keyboardType = s.keyboardType;
+    if (s.speedUnit === "characters" || s.speedUnit === "words")
+      settings.speedUnit = s.speedUnit;
+    if (s.textLines === 1 || s.textLines === 2)
+      settings.textLines = s.textLines;
     if (
       Number.isInteger(s.course) &&
       (s.course as number) >= 0 &&
@@ -132,8 +168,8 @@ export function lessonUnlocked(
       (r) =>
         sameMode(r, settings) &&
         r.course === course - 1 &&
-        r.accuracy >= 95 &&
-        r.speed >= 15 + (course - 1) * 5,
+        r.accuracy === 100 &&
+        Object.values(r.errors).every((n) => n === 0),
     )
   );
 }
@@ -150,6 +186,7 @@ export function summarize(history: Result[]) {
 }
 export class Session {
   position = 0;
+  mistakes: Record<number, string> = {};
   attempts = 0;
   correct = 0;
   errors: Record<string, number> = {};
@@ -162,6 +199,7 @@ export class Session {
     public text: string,
     _now = 0,
     public chinese = false,
+    public advanceOnError = false,
   ) {}
   get done() {
     return this.position === this.text.length;
@@ -183,7 +221,10 @@ export class Session {
         const expected = this.text[this.position];
         this.errors[expected] = (this.errors[expected] || 0) + 1;
         ok = false;
-        break;
+        if (this.advanceOnError) {
+          this.mistakes[this.position] = char;
+          this.position++;
+        } else break;
       }
     }
     if (this.done) {
@@ -193,8 +234,10 @@ export class Session {
     return ok;
   }
   backspace() {
-    if (!this.paused && !this.done)
+    if (!this.paused && !this.done) {
       this.position = Math.max(0, this.position - 1);
+      delete this.mistakes[this.position];
+    }
   }
   pause(now: number) {
     if (this.paused || this.done) return;
@@ -222,6 +265,10 @@ export class Session {
                 (this.chinese ? 1 : 5) /
                 (Math.max(seconds, 1) / 60),
             )
+          : 0,
+      charactersPerMinute:
+        seconds > 0
+          ? Math.round(this.position / (Math.max(seconds, 1) / 60))
           : 0,
       accuracy: this.attempts
         ? Math.round((this.correct / this.attempts) * 100)
