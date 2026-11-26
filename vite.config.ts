@@ -1,9 +1,18 @@
-import { defineConfig } from 'vite';
-
+import { defineConfig } from "vite";
+import { renderSeoHead } from "./src/tutor/seo";
 export default defineConfig({
-  base: process.env.GITHUB_ACTIONS ? '/dazi/' : './',
-  build: {
-    target: 'es2022',
-    sourcemap: true,
-  },
+  // Relative URLs work on the canonical custom domain and the GitHub Pages mirror.
+  base: "./",
+  plugins: [
+    {
+      name: "dazi-seo",
+      transformIndexHtml(html, context) {
+        return html.replace(
+          "<!-- SEO_METADATA -->",
+          renderSeoHead(!context.server),
+        );
+      },
+    },
+  ],
+  build: { target: "es2022", sourcemap: true },
 });

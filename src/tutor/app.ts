@@ -12,6 +12,7 @@ import {
 import { makeExercise, COURSES } from "./content";
 import { renderKeyboard, renderHands, updateKeyboard } from "./keyboard";
 import { icon } from "./icons";
+import { applyLocaleMetadata } from "./seo";
 import { renderOnboarding, type TourStep } from "./onboarding";
 const esc = (v: string) =>
   v.replace(
@@ -360,7 +361,7 @@ export function mountTutor(root: HTMLElement) {
   function render() {
     rendering = true;
     document.documentElement.lang = s().locale === "zh" ? "zh-CN" : "en";
-    document.title = t("DAZI · 打字练习", "DAZI · Typing Tutor");
+    applyLocaleMetadata(s().locale);
     root.innerHTML = `${statistics ? renderStatistics() : renderPractice()}${panel ? `<div class="panel-scrim" data-action="close-panel"></div>${panel === "settings" ? renderSettings() : renderHelp()}` : ""}${tourStep && !panel && !statistics ? renderOnboarding(tourStep, s(), Math.min(3, Math.max(0, session.correct - tourCorrectStart)), session.done) : ""}${unsaved ? `<button class="storage-warning" data-action="export">${t("未保存 · 导出备份", "Not saved · export a backup")}</button>` : ""}<input id="import-file" type="file" accept="application/json,.json" hidden>`;
     bind();
     if (!statistics) {
@@ -374,7 +375,7 @@ export function mountTutor(root: HTMLElement) {
     const metric = (glyph: string, id: string, label: string, suffix = "") =>
       `<div class="metric"><span class="metric-glyph">${icon(glyph)}</span><div class="metric-value"><div><span id="${id}">${id === "accuracy" ? 100 : 0}</span>${suffix}</div><span class="metric-label">${label}</span></div></div>`;
     return `<main class="app-shell practice-screen ${guideSettings().keyboard ? "" : "without-keyboard"} ${tourBlocking() ? "tour-blocking" : ""}" ${panel || tourBlocking() ? "inert" : ""}>
-      <button class="corner-button settings-button" data-action="settings" aria-label="${t("设置", "Settings")}" title="${t("设置", "Settings")}">${icon("settings")}</button>
+      <h1 class="sr-only">${t("在线打字练习与标准十指盲打训练", "Free online touch typing practice")}</h1><button class="corner-button settings-button" data-action="settings" aria-label="${t("设置", "Settings")}" title="${t("设置", "Settings")}">${icon("settings")}</button>
       <section class="metrics" aria-label="${t("实时练习统计", "Live statistics")}">${metric("wind", "speed", unit())}${metric("award", "accuracy", t("准确率", "accuracy"), "<small>%</small>")}${metric("skull", "typos", t("错字", "typos"))}</section>
       <section class="practice-strip ${s().textLines === 2 ? "two-lines" : ""} ${isIME() ? "ime-practice" : ""}" aria-label="${t("打字练习", "Typing practice")}">
         ${exercise.source && !isIME() ? `<div class="chinese-source">${esc(exercise.source)}</div>` : ""}

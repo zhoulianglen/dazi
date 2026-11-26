@@ -1,5 +1,7 @@
 # DAZI · KeyKey-style typing tutor
 
+**Live:** https://typing.zhoulianglen.com/
+
 A desktop browser typing product rebuilt against screenshots of the installed KeyKey macOS app: a charcoal practice canvas, three live metrics, a single practice line, outlined keyboard with translucent hand overlays, a right-side settings drawer and a full-window statistics screen.
 
 ## Run
@@ -31,6 +33,12 @@ Desktop physical keyboards are the primary input. No account or backend is neede
 
 The active product lives in `src/tutor/`: session/persistence in `model.ts`, curriculum in `content.ts`, scalable keyboard/hand geometry in `keyboard.ts`, UI in `app.ts`, styling in `styles.css` and Lucide icons in `icons.ts`. Earlier inactive implementation modules and regression tests remain in the repository. The build has no runtime dependencies or remote font requirement. Icon license notices are shipped in `public/third-party-licenses.txt`.
 
-`dist/` can deploy to a static host. The existing GitHub Actions base-path configuration is retained. No production deployment or remote push is part of this local implementation.
+`dist/` is the production output. Cloudflare Pages project `dazi` is linked to `zhoulianglen/dazi` on `main`: build command `npm run build`, output `dist`. Relative asset URLs also keep the GitHub Pages mirror functional. The canonical custom domain is `typing.zhoulianglen.com`, with a proxied CNAME to `dazi-drs.pages.dev`. Pages redirect rules consolidate the previous DAZI hostnames onto that domain.
+
+## Search metadata
+
+`src/tutor/seo.ts` is the single source for Chinese/English titles, descriptions, keywords, canonical URL, Open Graph/Twitter cards and WebSite/WebApplication structured data. Vite renders these into HTML before JavaScript runs; locale changes update the localized copy without duplicating tags. Development previews use `noindex`; production is indexable. `robots.txt` and `sitemap.xml` advertise only the real canonical root. No alternate-language URLs or ratings are invented. Google does not use the keywords meta tag for ranking; see [Google's supported meta tags](https://developers.google.com/search/docs/crawling-indexing/special-tags).
+
+Social artwork is an original, reproducible SVG (`public/og-image.svg`) rendered to a 1200 × 630 PNG with `rsvg-convert`. It contains no user session data. Icons and the apple-touch icon are bundled locally.
 
 The current binding design/implementation record is `docs/plans/2026-11-26-keykey-replica.md`; it supersedes the earlier independent desktop UI direction.
