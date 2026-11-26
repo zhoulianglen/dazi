@@ -33,7 +33,7 @@ Desktop physical keyboards are the primary input. No account or backend is neede
 
 The active product lives in `src/tutor/`: session/persistence in `model.ts`, curriculum in `content.ts`, scalable keyboard/hand geometry in `keyboard.ts`, UI in `app.ts`, styling in `styles.css` and Lucide icons in `icons.ts`. Earlier inactive implementation modules and regression tests remain in the repository. The build has no runtime dependencies or remote font requirement. Icon license notices are shipped in `public/third-party-licenses.txt`.
 
-`dist/` is the production output. Cloudflare Pages project `dazi` is linked to `zhoulianglen/dazi` on `main`: build command `npm run build`, output `dist`. Relative asset URLs also keep the GitHub Pages mirror functional. The canonical custom domain is `typing.zhoulianglen.com`, with a proxied CNAME to `dazi-drs.pages.dev`. Pages redirect rules consolidate the previous DAZI hostnames onto that domain.
+`dist/` is the production output. Cloudflare Pages project `dazi` is linked to `zhoulianglen/dazi` on `main`: build command `npm run build`, output `dist`. Relative asset URLs also keep the GitHub Pages mirror functional. The canonical custom domain is `typing.zhoulianglen.com`, with a proxied CNAME to `dazi-drs.pages.dev`. Pages Functions middleware consolidates the previous DAZI hostnames onto that domain.
 
 ## Search metadata
 
