@@ -14,6 +14,8 @@ npm run preview    # serve the production build
 
 ## Product behavior
 
+- First visit: an optional three-step guide chooses practice content, highlights F/J home positions and teaches three correct keystrokes in the real exercise. Completed/skipped guides stay dismissed; replay from Help. Existing learners with recorded sessions are not interrupted. An idle hint explains how to start and where to find settings/help.
+
 - Six cumulative frequency-based lessons plus Expert. The observed first lesson uses E T A O and the reference screenshot's practice sequence. Manual mode permits any lesson; Automatic mode advances after a genuinely error-free completion. Later word lists are implemented locally; the native app's private generation algorithm is not included.
 - Capitals, numbers and punctuation are independent exercise options. Chinese supports number/punctuation options; pinyin also supports capitals. Capital letters are disabled for native Chinese IME practice.
 - Speed in characters/minute or words/minute (five characters per word), accuracy and typo count. Wrong characters advance and remain red. Backspace can correct the visible prefix, but recorded mistakes still prevent error-free progression.

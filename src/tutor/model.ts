@@ -31,7 +31,12 @@ export type Result = {
   errors: Record<string, number>;
   count: number;
 };
-export type Data = { version: 1; settings: Settings; history: Result[] };
+export type Data = {
+  version: 1;
+  settings: Settings;
+  history: Result[];
+  onboarding: "pending" | "complete" | "skipped";
+};
 export const STORAGE_KEY = "dazi.tutor.v1";
 export const defaultSettings = (): Settings => ({
   locale: "zh",
@@ -125,13 +130,22 @@ export function parseData(value: unknown): Data {
     if ([1, 2, 3].includes(s.duration as number))
       settings.duration = s.duration as number;
   }
+  const history =
+    isObject(value) && Array.isArray(value.history)
+      ? value.history.filter(validResult).slice(-2000)
+      : [];
+  const onboarding =
+    isObject(value) &&
+    ["pending", "complete", "skipped"].includes(value.onboarding as string)
+      ? (value.onboarding as Data["onboarding"])
+      : history.length
+        ? "complete"
+        : "pending";
   return {
     version: 1,
     settings,
-    history:
-      isObject(value) && Array.isArray(value.history)
-        ? value.history.filter(validResult).slice(-2000)
-        : [],
+    onboarding,
+    history,
   };
 }
 export function readData(storage?: Pick<Storage, "getItem">): Data {

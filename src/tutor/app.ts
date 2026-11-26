@@ -12,6 +12,7 @@ import {
 import { makeExercise, COURSES } from "./content";
 import { renderKeyboard, renderHands, updateKeyboard } from "./keyboard";
 import { icon } from "./icons";
+import { renderOnboarding, type TourStep } from "./onboarding";
 const esc = (v: string) =>
   v.replace(
     /[&<>"']/g,
@@ -24,11 +25,14 @@ type Panel = "settings" | "help" | null;
 export function mountTutor(root: HTMLElement) {
   let data = readData();
   let panel: Panel = null;
+  let tourStep: TourStep | null = data.onboarding === "pending" ? 1 : null;
+  let tourCorrectStart = 0;
   let statistics = false;
   let exercise = makeExercise(data.settings.course, data.settings, {}, () => 0);
   let session = new Session(exercise.text, 0, isIME(), true);
   let lastResult: Result | null = null;
   let composing = false;
+  let rendering = false;
   let compositionCommit = "";
   let unsaved = false;
   let focused = true;
@@ -53,6 +57,80 @@ export function mountTutor(root: HTMLElement) {
       : t("词 / 分钟", "words/min");
   const displayedSpeed = (speed: number) =>
     Math.round(speed * (isIME() || s().speedUnit === "words" ? 1 : 5));
+  const tourBlocking = () => tourStep === 1 || tourStep === 2;
+  const guideSettings = (): Settings =>
+    tourStep === 2 || tourStep === 3
+      ? { ...s(), keyboard: true, hands: true, keyHints: true }
+      : s();
+  function focusTour() {
+    requestAnimationFrame(() =>
+      root.querySelector<HTMLButtonElement>("[data-tour-primary]")?.focus(),
+    );
+  }
+  function beginTour() {
+    panel = null;
+    statistics = false;
+    tourStep = 1;
+    tourCorrectStart = session.correct;
+    if (session.done) restart();
+    session.pause(performance.now());
+    render();
+    focusTour();
+  }
+  function finishTour(completed: boolean) {
+    const inline = tourStep === 3 && !session.done;
+    tourStep = null;
+    if (completed || data.onboarding !== "complete")
+      data.onboarding = completed ? "complete" : "skipped";
+    save();
+    session.resume(performance.now());
+    focused = true;
+    if (inline) {
+      // Keep the native input/composition target mounted while the user types.
+      root.querySelector(".typing-coach")?.remove();
+      if (!s().keyboard) {
+        root.querySelector(".keyboard-stage")?.remove();
+        root
+          .querySelector(".practice-screen")
+          ?.classList.add("without-keyboard");
+      } else if (!s().hands) root.querySelector(".hand-overlay")?.remove();
+      const warning = root.querySelector(".storage-warning");
+      if (unsaved && !warning) {
+        const button = document.createElement("button");
+        button.className = "storage-warning";
+        button.dataset.action = "export";
+        button.textContent = t(
+          "未保存 · 导出备份",
+          "Not saved · export a backup",
+        );
+        button.onclick = exportBackup;
+        root.append(button);
+      } else if (!unsaved) warning?.remove();
+      update();
+    } else render();
+    focusInput();
+    if (completed)
+      notify(
+        t(
+          "已经上手！继续照着屏幕练习，先准确，再提速。",
+          "You’ve got it. Keep typing the text above. Accuracy before speed.",
+        ),
+      );
+  }
+  function nextTourStep() {
+    if (tourStep === 1) {
+      tourStep = 2;
+      render();
+      focusTour();
+    } else if (tourStep === 2) {
+      tourStep = 3;
+      tourCorrectStart = session.correct;
+      session.resume(performance.now());
+      focused = true;
+      render();
+      focusInput();
+    }
+  }
   function save() {
     unsaved = !writeData(data);
   }
@@ -98,9 +176,10 @@ export function mountTutor(root: HTMLElement) {
     lastResult = null;
     focused = true;
     if (!panel && !statistics) autoContinue = false;
-    if (panel || statistics) session.pause(performance.now());
+    if (tourStep === 3) tourCorrectStart = 0;
+    if (panel || statistics || tourBlocking()) session.pause(performance.now());
     render();
-    if (!panel && !statistics) focusInput();
+    if (!panel && !statistics && !tourBlocking()) focusInput();
   }
   function setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
     s()[key] = value;
@@ -251,7 +330,15 @@ export function mountTutor(root: HTMLElement) {
     render();
   }
   function accept(value: string) {
-    if (!value || session.paused || panel || statistics || session.done) return;
+    if (
+      !value ||
+      session.paused ||
+      panel ||
+      statistics ||
+      tourBlocking() ||
+      session.done
+    )
+      return;
     const old = session.position;
     const ok = session.input(value, performance.now());
     sound(!ok);
@@ -267,31 +354,37 @@ export function mountTutor(root: HTMLElement) {
     updateLetters(old);
     if (session.done) complete();
     else update();
+    if (tourStep === 3 && session.correct - tourCorrectStart >= 3)
+      finishTour(true);
   }
   function render() {
+    rendering = true;
     document.documentElement.lang = s().locale === "zh" ? "zh-CN" : "en";
     document.title = t("DAZI · 打字练习", "DAZI · Typing Tutor");
-    root.innerHTML = `${statistics ? renderStatistics() : renderPractice()}${panel ? `<div class="panel-scrim" data-action="close-panel"></div>${panel === "settings" ? renderSettings() : renderHelp()}` : ""}${unsaved ? `<button class="storage-warning" data-action="export">${t("未保存 · 导出备份", "Not saved · export a backup")}</button>` : ""}<input id="import-file" type="file" accept="application/json,.json" hidden>`;
+    root.innerHTML = `${statistics ? renderStatistics() : renderPractice()}${panel ? `<div class="panel-scrim" data-action="close-panel"></div>${panel === "settings" ? renderSettings() : renderHelp()}` : ""}${tourStep && !panel && !statistics ? renderOnboarding(tourStep, s(), Math.min(3, Math.max(0, session.correct - tourCorrectStart)), session.done) : ""}${unsaved ? `<button class="storage-warning" data-action="export">${t("未保存 · 导出备份", "Not saved · export a backup")}</button>` : ""}<input id="import-file" type="file" accept="application/json,.json" hidden>`;
     bind();
     if (!statistics) {
       update();
       requestAnimationFrame(updateTextPosition);
     }
+    rendering = false;
+    if (tourBlocking() && !panel && !statistics) focusTour();
   }
   function renderPractice() {
     const metric = (glyph: string, id: string, label: string, suffix = "") =>
       `<div class="metric"><span class="metric-glyph">${icon(glyph)}</span><div class="metric-value"><div><span id="${id}">${id === "accuracy" ? 100 : 0}</span>${suffix}</div><span class="metric-label">${label}</span></div></div>`;
-    return `<main class="app-shell practice-screen ${s().keyboard ? "" : "without-keyboard"}" ${panel ? "inert" : ""}>
+    return `<main class="app-shell practice-screen ${guideSettings().keyboard ? "" : "without-keyboard"} ${tourBlocking() ? "tour-blocking" : ""}" ${panel || tourBlocking() ? "inert" : ""}>
       <button class="corner-button settings-button" data-action="settings" aria-label="${t("设置", "Settings")}" title="${t("设置", "Settings")}">${icon("settings")}</button>
       <section class="metrics" aria-label="${t("实时练习统计", "Live statistics")}">${metric("wind", "speed", unit())}${metric("award", "accuracy", t("准确率", "accuracy"), "<small>%</small>")}${metric("skull", "typos", t("错字", "typos"))}</section>
       <section class="practice-strip ${s().textLines === 2 ? "two-lines" : ""} ${isIME() ? "ime-practice" : ""}" aria-label="${t("打字练习", "Typing practice")}">
         ${exercise.source && !isIME() ? `<div class="chinese-source">${esc(exercise.source)}</div>` : ""}
         <div class="typing-window"><div id="typing-text" class="typing-text ${isIME() ? "chinese-text" : ""}" aria-hidden="true">${renderLetters()}</div></div>
-        <label class="sr-only" for="typing-input">${t("输入练习文字", "Type the practice text")}: ${esc(exercise.text)}</label><textarea id="typing-input" class="typing-input ${isIME() ? "ime-input" : ""}" autocomplete="off" autocapitalize="off" spellcheck="false" rows="1" ${session.paused || session.done || panel ? "disabled" : ""} placeholder="${isIME() ? t("使用中文输入法输入上方文字", "Use your Chinese IME to type the text above") : ""}"></textarea>
-        ${session.done ? renderCompletion() : ""}
+        <label class="sr-only" for="typing-input">${t("输入练习文字", "Type the practice text")}: ${esc(exercise.text)}</label><textarea id="typing-input" class="typing-input ${isIME() ? "ime-input" : ""}" autocomplete="off" autocapitalize="off" spellcheck="false" rows="1" ${session.paused || session.done || panel || tourBlocking() ? "disabled" : ""} placeholder="${isIME() ? t("使用中文输入法输入上方文字", "Use your Chinese IME to type the text above") : ""}"></textarea>
+        ${session.done && tourStep !== 3 ? renderCompletion() : ""}
+        <p class="start-guidance ${session.started !== null || tourStep || session.done ? "is-hidden" : ""}">${isIME() ? t("点击这里，使用中文输入法输入上方汉字。", "Click here and type the text above with your Chinese IME.") : t("直接敲击上方文字开始 · 蓝色提示下一个键与对应手指", "Type the text above to begin · Blue shows the next key and finger")}<span>${t("右上角设置可选语言 · 左下角 ? 可重看引导", "Choose language in Settings · Replay the guide from ?")}</span></p>
         <div id="practice-overlay" class="practice-overlay ${session.paused ? "" : "is-hidden"}"><button class="resume-button" data-action="resume">${icon("play")}<span>${t("点击继续练习", "Click to resume")}</span></button></div><span class="sr-only" id="typed-count">${session.position}</span>
       </section>
-      ${s().keyboard ? `<section class="keyboard-stage" aria-label="${t("键盘与双手指法提示", "Keyboard and finger hints")}">${renderKeyboard(s())}${s().hands ? renderHands() : ""}</section>` : ""}
+      ${guideSettings().keyboard ? `<section class="keyboard-stage" aria-label="${t("键盘与双手指法提示", "Keyboard and finger hints")}">${renderKeyboard(guideSettings())}${guideSettings().hands ? renderHands() : ""}</section>` : ""}
       <div class="screen-controls"><button class="corner-button help-button" data-action="help" aria-label="${t("帮助", "Help")}" title="${t("帮助", "Help")}">${icon("circle-help")}</button><button class="corner-button restart-button" data-action="restart" aria-label="${t("重新开始", "Restart")}" title="${t("重新开始 [Return]", "Restart lesson [Return key]")}">${icon("rotate-cw")}</button><button class="corner-button statistics-button" data-action="statistics" aria-label="${t("学习统计", "Statistics")}" title="${t("学习统计", "Statistics")}">${icon("chart-pie")}</button></div>
     </main>`;
   }
@@ -346,14 +439,32 @@ export function mountTutor(root: HTMLElement) {
       .querySelector("#practice-overlay")
       ?.classList.toggle(
         "is-hidden",
-        !session.paused || session.done || !!panel,
+        !session.paused || session.done || !!panel || tourBlocking(),
       );
     updateKeyboard(
       root,
-      s(),
+      guideSettings(),
       exercise.text[session.position] || "",
       session.done,
     );
+    if (tourStep === 2) {
+      updateKeyboard(root, s(), "", true);
+      root
+        .querySelectorAll<SVGGElement>('[data-key="f"],[data-key="j"]')
+        .forEach((el) => el.classList.add("home-guide-key"));
+      root
+        .querySelectorAll('[data-hand-finger="3"],[data-hand-finger="6"]')
+        .forEach((el) => el.classList.add("active-finger"));
+    }
+    root
+      .querySelector(".start-guidance")
+      ?.classList.toggle(
+        "is-hidden",
+        session.started !== null || !!tourStep || session.done,
+      );
+    const progress = root.querySelector("#tour-typed-progress");
+    if (progress)
+      progress.textContent = `${Math.min(3, Math.max(0, session.correct - tourCorrectStart))} / 3`;
     updateTextPosition();
   }
   function renderCompletion() {
@@ -559,7 +670,7 @@ export function mountTutor(root: HTMLElement) {
     )}</svg><span class="sr-only">${t("暂无练习记录；图表为占位示意。", "No recorded sessions yet. Chart is a placeholder illustration.")}</span>`;
   }
   function renderHelp() {
-    return `<div class="help-backdrop"><section class="help-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title"><button class="dialog-close" data-action="close-panel" aria-label="${t("关闭", "Close")}">${icon("circle-x")}</button><h1 id="help-title">${t("学习触摸打字", "Learn to touch type")}</h1><div class="help-hands">${renderHands()}</div><div class="help-copy"><h2>${t("双手回到基准键", "Find your home keys")}</h2><p>${t("左手 A S D F，右手 J K L ;。食指找到 F 和 J 的凸起，拇指轻放空格键。按键时只移动对应的手指。", "Left hand: A S D F. Right hand: J K L ;. Find the bumps on F and J with your index fingers. Rest your thumbs on the space bar.")}</p><h2>${t("放松，保持自然坐姿", "Keep a relaxed posture")}</h2><p>${t("肩膀放松，手腕保持自然。双脚平放，屏幕与眼睛保持舒适距离。尽量看屏幕，不要低头找键。", "Relax your shoulders and keep your wrists neutral. Put your feet flat on the floor. Look at the screen instead of down at your keyboard.")}</p><h2>${t("准确优先，循序渐进", "Accuracy comes first")}</h2><p>${t("自动模式下，完整且无错地完成课程后进阶；手动模式可自由选课。错误会显示为红色。每 15–20 分钟休息一次。", "In Automatic mode, finish a lesson without mistakes to advance. Manual mode lets you choose any lesson. Typos appear in red. Take a break every 15–20 minutes.")}</p><div class="shortcuts"><span><kbd>Return</kbd>${t("重新练习 / 继续", "Restart / continue")}</span><span><kbd>Esc</kbd>${t("暂停 / 关闭设置", "Pause / close settings")}</span></div><p class="help-note">${t("手指提示用于指引，不会检测你的实际姿势。中文全拼不带声调，ü 用 v 表示。", "Hand hints guide you; they do not detect your actual posture. Pinyin uses no tone marks, and v for ü.")}</p></div><button class="help-start" data-action="close-panel">${t("开始练习", "Start practicing")}</button></section></div>`;
+    return `<div class="help-backdrop"><section class="help-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title"><button class="dialog-close" data-action="close-panel" aria-label="${t("关闭", "Close")}">${icon("circle-x")}</button><h1 id="help-title">${t("学习触摸打字", "Learn to touch type")}</h1><div class="help-hands">${renderHands()}</div><button class="replay-onboarding" data-action="replay-onboarding">${t("重新查看新手引导", "Replay getting started")}</button><div class="help-copy"><h2>${t("双手回到基准键", "Find your home keys")}</h2><p>${t("左手 A S D F，右手 J K L ;。食指找到 F 和 J 的凸起，拇指轻放空格键。按键时只移动对应的手指。", "Left hand: A S D F. Right hand: J K L ;. Find the bumps on F and J with your index fingers. Rest your thumbs on the space bar.")}</p><h2>${t("放松，保持自然坐姿", "Keep a relaxed posture")}</h2><p>${t("肩膀放松，手腕保持自然。双脚平放，屏幕与眼睛保持舒适距离。尽量看屏幕，不要低头找键。", "Relax your shoulders and keep your wrists neutral. Put your feet flat on the floor. Look at the screen instead of down at your keyboard.")}</p><h2>${t("准确优先，循序渐进", "Accuracy comes first")}</h2><p>${t("自动模式下，完整且无错地完成课程后进阶；手动模式可自由选课。错误会显示为红色。每 15–20 分钟休息一次。", "In Automatic mode, finish a lesson without mistakes to advance. Manual mode lets you choose any lesson. Typos appear in red. Take a break every 15–20 minutes.")}</p><div class="shortcuts"><span><kbd>Return</kbd>${t("重新练习 / 继续", "Restart / continue")}</span><span><kbd>Esc</kbd>${t("暂停 / 关闭设置", "Pause / close settings")}</span></div><p class="help-note">${t("手指提示用于指引，不会检测你的实际姿势。中文全拼不带声调，ü 用 v 表示。", "Hand hints guide you; they do not detect your actual posture. Pinyin uses no tone marks, and v for ü.")}</p></div><button class="help-start" data-action="close-panel">${t("开始练习", "Start practicing")}</button></section></div>`;
   }
   async function importBackup(file: File) {
     try {
@@ -614,6 +725,23 @@ export function mountTutor(root: HTMLElement) {
       (el) =>
         (el.onclick = () => {
           switch (el.dataset.action) {
+            case "tour-next":
+              nextTourStep();
+              break;
+            case "tour-back":
+              tourStep = 1;
+              render();
+              focusTour();
+              break;
+            case "skip-onboarding":
+              finishTour(false);
+              break;
+            case "replay-onboarding":
+              beginTour();
+              break;
+            case "tour-locale":
+              setSetting("locale", s().locale === "zh" ? "en" : "zh");
+              break;
             case "settings":
               openPanel("settings");
               break;
@@ -731,6 +859,13 @@ export function mountTutor(root: HTMLElement) {
       const el = root.querySelector<HTMLSelectElement>("#" + id);
       if (el) el.onchange = () => cb(el.value);
     };
+    onSelect("onboarding-language", (v) => {
+      s().language = v === "en" ? "en" : "zh";
+      if (v !== "en") s().chineseMode = v === "zh-ime" ? "ime" : "pinyin";
+      if (s().automatic && !lessonUnlocked(s().course, history(), s()))
+        s().course = 0;
+      restart();
+    });
     onSelect("interface-language", (v) =>
       setSetting("locale", v as "zh" | "en"),
     );
@@ -759,6 +894,7 @@ export function mountTutor(root: HTMLElement) {
         update();
       };
       input.onblur = (e) => {
+        if (rendering || !input.isConnected) return;
         if (session.done || panel || statistics) return;
         if (
           e.relatedTarget instanceof HTMLElement &&
@@ -847,6 +983,30 @@ export function mountTutor(root: HTMLElement) {
   }
   function documentKey(e: KeyboardEvent) {
     if (e.isComposing) return;
+    if (tourBlocking() && !panel && !statistics) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        finishTour(false);
+        return;
+      }
+      if (e.key === "Tab") {
+        const elements = [
+          ...root.querySelectorAll<HTMLElement>(
+            ".intro-tour button,.intro-tour select",
+          ),
+        ].filter((el) => !(el as HTMLButtonElement).disabled);
+        const first = elements[0],
+          last = elements[elements.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+      return;
+    }
     if (panel) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -909,8 +1069,10 @@ export function mountTutor(root: HTMLElement) {
   }, 200);
   const resize = () => updateTextPosition();
   window.addEventListener("resize", resize);
+  if (tourBlocking()) session.pause(performance.now());
   render();
-  focusInput();
+  if (tourBlocking()) focusTour();
+  else focusInput();
   return () => {
     clearInterval(interval);
     clearTimeout(toastTimer);

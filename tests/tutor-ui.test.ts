@@ -25,6 +25,8 @@ const mount = () => {
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
+  // These are returning-learner flows. First-run behavior is tested in onboarding.test.ts.
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarding: "complete" }));
   document.body.innerHTML = '<div id="app"></div>';
   vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
     cb(0);
