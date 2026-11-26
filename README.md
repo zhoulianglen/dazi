@@ -1,43 +1,34 @@
-# DAZI · Typing Trainer
+# DAZI · 打字
 
-Single-page typing trainer focused on **gesture correction** — guides users toward standard 10-finger touch typing on PC, and dual-thumb form on mobile.
+A complete PC browser typing tutor inspired by the focused learning experience of KeyKey. Learn standard ten-finger technique through progressive lessons, a live keyboard and hand guide, adaptive content, and personal statistics.
 
-**Live:** https://zhoulianglen.github.io/dazi/
+## Run
 
-## Stack
-- Vite 5 + TypeScript (strict)
-- Vanilla DOM + hand-rolled CSS (no UI framework)
-- Vitest (jsdom)
-- localStorage for persistence; zero backend
-
-## Develop
 ```bash
 npm install
-npm run dev      # local server
-npm run test     # vitest
-npm run build    # static build to dist/
+npm run dev        # local development; Vite prints the URL
+npm test           # full unit and UI behavior suite
+npm run build      # type check and generate dist/
+npm run preview    # preview the production build
 ```
 
-## Architecture
+## Product
 
-```
-engine/    pure logic (no DOM): typing engine, rhythm analyzer, lesson data, finger map
-state/     reactive store + localStorage I/O
-ui/        DOM mounters; one module per panel; subscribe to state, mutate DOM directly
-audio/     web-audio synthesized keypress sounds
-styles/    design tokens + layout grid + fx animations
-```
+- **Practice:** seven levels, live speed/accuracy/active time, next-key and opposite-hand Shift guidance, finger illustrations, optional sound, pause/resume, restart and results.
+- **Courses:** automatic progression (at least 95% accuracy plus the course speed target), or manual access to every lesson. English introduces key groups; Chinese introduces words and increasingly complex sentences.
+- **Independent languages:** Chinese/English interface and Chinese/English practice content are separate preferences. Switching the interface preserves the active exercise and typed progress.
+- **Two Chinese modes:** pinyin key practice (no tones; `v` for `ü`) and native IME transcription. Composition is ignored until committed; Chinese punctuation must match the displayed text.
+- **Adaptive practice:** recent mistakes prioritize matching words or sentences in the next exercise, for English, pinyin and Chinese IME. Content stays inside taught keys for introductory English lessons.
+- **Statistics:** speed chart, average accuracy, focused time, weak keys and dated history. English/pinyin use WPM (5 keystrokes per word); Chinese IME uses characters/minute. Modes are tracked separately.
+- **Preferences:** keyboard/hands/sounds, lesson length, daily practice goal, language controls, JSON backup export/import with validation and history deduplication. Clearing history requires an explicit in-app confirmation.
+- **Local data:** settings and up to 2,000 completed sessions stay in this browser under `dazi.tutor.v1`; no account or backend. Export before changing browsers. Blocked/full storage is reported without interrupting practice.
 
-UI never imports DOM-free engine internals beyond the public types in `src/types.ts`.
+Practice pauses when the window loses focus, the page is hidden, or another view opens. Paste is disabled during exercises. The guide explains posture; the browser does not observe a learner’s actual fingers or body position. Desktop keyboards are the primary input; narrow layouts adapt, but a physical keyboard is recommended.
 
-## Lessons
-Nine fixed levels: home row → reaches → top row → bottom row → numbers → punctuation → free text. Each requires WPM + 95% accuracy to unlock the next.
+## Implementation
 
-## Gesture coaching
-The browser can't see your fingers. We use two signals:
-1. **Visual**: every key colored by its standard finger; the expected key + finger pulse.
-2. **Rhythm**: per-(prev, curr) interval thresholds. Slow pairs flagged in the session summary with a hint of the correct finger.
+Vite + strict TypeScript + DOM/CSS, with Vitest/jsdom tests. `src/main.ts` mounts the current product in `src/tutor/`: pure session/persistence logic in `model.ts`, learning content/key mapping in `content.ts`, views in `app.ts`, visual styles in `styles.css` and Lucide SVGs in `icons.ts` (ISC license). Earlier implementation modules remain in the repository, with their regression tests, but are not bundled into the current product.
 
-## Spec / plan
-- `docs/superpowers/specs/2026-05-25-dazi-typing-trainer-design.md`
-- `docs/superpowers/plans/2026-05-25-dazi-typing-trainer.md`
+`dist/` is a static site suitable for GitHub Pages or another static host. The existing GitHub Actions base-path configuration is retained. Google Fonts are optional visual enhancements; local fallback fonts keep the product usable if they cannot load.
+
+Design and implementation notes: `docs/plans/2026-11-26-desktop-tutor-design.md` and `docs/plans/2026-11-26-desktop-tutor.md`.
