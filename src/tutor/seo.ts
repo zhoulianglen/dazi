@@ -2,7 +2,7 @@ import type { Locale } from "./model";
 export const SITE_URL = "https://typing.zhoulianglen.com/";
 export const PAGE_META = {
   zh: {
-    title: "DAZI 在线打字练习｜免费盲打与十指指法训练",
+    title: "在线打字练习 - 免费中英文盲打与指法训练 | DAZI",
     description:
       "免费在线学习标准十指盲打，支持英文、中文拼音和中文输入法练习。DAZI 提供新手引导、键盘与双手指法提示、渐进课程及速度和准确率统计；无需注册，进度保存在本地浏览器。",
     keywords:
@@ -10,7 +10,7 @@ export const PAGE_META = {
     locale: "zh_CN",
   },
   en: {
-    title: "DAZI Typing Tutor | Free Online Touch Typing Practice",
+    title: "Free Online Typing Practice & Touch Typing Lessons | DAZI",
     description:
       "Learn touch typing with guided finger positions, a visual keyboard, progressive lessons and speed and accuracy tracking. Practice English, Chinese pinyin or Chinese IME. Free, no account required; progress stays in your browser.",
     keywords:
